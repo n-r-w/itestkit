@@ -1,0 +1,86 @@
+// Standard order: service makes 2 external calls and returns final `SERVING`.
+{
+  "name": "api returns serving for standard order",
+  "steps": [
+    // Step 1 (prepare): seed order in in-memory DB.
+    {
+      "id": "seed-orders",
+      "kind": "prepare",
+      "handler": "SeedOrders",
+      "request": {
+        "orders": [
+          {
+            "order_id": "order-201",
+            "amount": 1200
+          }
+        ]
+      }
+    },
+    // Step 2 (prepare): plan expected outbound calls and external API responses.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCalls",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "risk:order-201",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "reserve:order-201",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          }
+        ]
+      }
+    },
+    // Step 3 (action): call our service API.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallOrderAPI",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}"
+      }
+    },
+    // Step 4 (verify): check external call fact, order, and count.
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCalls",
+      "request": {
+        "expected_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}"
+        ],
+        "expected_calls": 2
+      }
+    },
+    // Step 5 (verify): check that DB was updated after API processing.
+    {
+      "id": "verify-order-state",
+      "kind": "verify",
+      "handler": "VerifyOrderState",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}",
+        "expected_status": "SERVING",
+        "expected_external_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}"
+        ]
+      }
+    }
+  ],
+  // Step 6 (assert): key check is our service API response.
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "status": "SERVING"
+    }
+  }
+}

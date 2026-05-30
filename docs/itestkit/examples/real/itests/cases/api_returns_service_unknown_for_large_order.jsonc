@@ -1,0 +1,103 @@
+// Large order: service makes 3 external calls (including manual) and returns `SERVICE_UNKNOWN`.
+{
+  "name": "api returns service_unknown for large order",
+  "steps": [
+    // Step 1 (prepare): seed order in in-memory DB.
+    {
+      "id": "seed-orders",
+      "kind": "prepare",
+      "handler": "SeedOrders",
+      "request": {
+        "orders": [
+          {
+            "order_id": "order-202",
+            "amount": 7000
+          }
+        ]
+      }
+    },
+    // Step 2 (prepare): plan 3 sequential outbound calls.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCalls",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "risk:order-202",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "reserve:order-202",
+            "stub_response": {
+              "status": "NOT_SERVING"
+            }
+          },
+          {
+            "expected_service": "manual:order-202",
+            "stub_response": {
+              "status": "SERVICE_UNKNOWN"
+            }
+          }
+        ]
+      }
+    },
+    // Step 3 (action): call our service API.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallOrderAPI",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}"
+      }
+    },
+    // Step 4 (verify): check external call fact, order, and count.
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCalls",
+      "request": {
+        // The key part here is runtime interpolation from prepare-step output `plan-external`.
+        // steps.plan-external.response.calls.N.expected_service:
+        //  - N=0 -> "risk:order-202"
+        //  - N=1 -> "reserve:order-202"
+        //  - N=2 -> "manual:order-202"
+        // As a result, verify compares actual outbound order
+        // with the same plan set in prepare, without string duplication.
+        "expected_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}",
+          "{{steps.plan-external.response.calls.2.expected_service}}"
+        ],
+        "expected_calls": 3
+      }
+    },
+    // Step 5 (verify): check order state in DB after processing.
+    {
+      "id": "verify-order-state",
+      "kind": "verify",
+      "handler": "VerifyOrderState",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}",
+        "expected_status": "SERVICE_UNKNOWN",
+        // The same interpolation is used to verify
+        // that this exact external-call sequence was persisted in DB.
+        "expected_external_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}",
+          "{{steps.plan-external.response.calls.2.expected_service}}"
+        ]
+      }
+    }
+  ],
+  // Step 6 (assert): key check is our service API response.
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "status": "SERVICE_UNKNOWN"
+    }
+  }
+}

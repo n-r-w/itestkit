@@ -1,0 +1,61 @@
+// The external API returns `NOT_SERVING`, and our API must return `NOT_SERVING`.
+{
+  "name": "api returns not_serving when external returns not_serving",
+  "steps": [
+    // Step 1 (prepare): plan two external calls with different inputs and responses.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCheck",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "order-101-precheck",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "order-101-final",
+            "stub_response": {
+              "status": "NOT_SERVING"
+            }
+          }
+        ]
+      }
+    },
+    // Step 2 (action): one inbound API call that executes two outbound calls.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallAPI",
+      "request": {
+        "service_chain": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}"
+        ]
+      }
+    },
+    // Step 3 (verify): additionally confirm that external calls happened and were correct.
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCheck",
+      "request": {
+        "expected_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}"
+        ],
+        "expected_calls": 2
+      }
+    }
+  ],
+  // Step 4 (assert): main case check is the final API response of our service.
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "status": "NOT_SERVING"
+    }
+  }
+}

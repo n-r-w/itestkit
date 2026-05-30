@@ -1,0 +1,58 @@
+{
+  "name": "sync api call triggers external api with planned request and response",
+  "steps": [
+    {
+      "id": "seed-db",
+      "kind": "prepare",
+      "handler": "SeedData",
+      "request": {
+        "orders": [
+          {
+            "order_id": "order-100",
+            "amount": 4200
+          }
+        ]
+      }
+    },
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCharge",
+      "request": {
+        "expected_request": {
+          "order_id": "order-100",
+          "amount": 4200
+        },
+        "stub_response": {
+          "result": "approved",
+          "approval_code": "ap-001"
+        }
+      }
+    },
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CreateOrder",
+      "request": {
+        "order_id": "order-100"
+      }
+    },
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCharge",
+      "request": {
+        "order_id": "order-100"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "order_id": "order-100",
+      "external_result": "approved",
+      "approval_code": "ap-001"
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "name": "async api call eventually performs external api call",
+  "steps": [
+    {
+      "id": "seed-db",
+      "kind": "prepare",
+      "handler": "SeedData",
+      "request": {
+        "orders": [
+          {
+            "order_id": "order-200",
+            "amount": 1300
+          }
+        ]
+      }
+    },
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCharge",
+      "request": {
+        "expected_request": {
+          "order_id": "order-200",
+          "amount": 1300
+        },
+        "stub_response": {
+          "result": "approved",
+          "approval_code": "ap-777"
+        }
+      }
+    },
+    {
+      "id": "submit-order",
+      "kind": "action",
+      "handler": "SubmitOrder",
+      "request": {
+        "order_id": "order-200"
+      }
+    },
+    {
+      "id": "await-external-sync",
+      "kind": "await",
+      "handler": "AwaitExternalSync",
+      "request": {
+        "order_id": "order-200"
+      },
+      "retry": {
+        "timeout_ms": 300,
+        "interval_ms": 10,
+        "max_attempts": 5
+      }
+    },
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCharge",
+      "request": {
+        "order_id": "order-200"
+      }
+    },
+    {
+      "id": "get-order",
+      "kind": "verify",
+      "handler": "GetOrder",
+      "request": {
+        "order_id": "order-200"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "get-order",
+    "response": {
+      "order_id": "order-200",
+      "processed": true,
+      "external_result": "approved",
+      "approval_code": "ap-777"
+    }
+  }
+}

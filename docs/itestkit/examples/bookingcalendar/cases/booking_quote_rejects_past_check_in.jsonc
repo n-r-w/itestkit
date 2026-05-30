@@ -1,0 +1,33 @@
+{
+    // Negative case: the fixed SUT clock rejects a stay that starts before the shared test date anchor.
+    "name": "booking quote rejects past check-in",
+    "steps": [
+        {
+            "id": "seed-data",
+            "kind": "prepare",
+            "handler": "SeedData",
+            "request": {
+                "bookings": [
+                    {
+                        "booking_id": "booking-101",
+                        "hotel_id": "hotel-9",
+                        "check_in_date": "<test_date-1d>",
+                        "check_out_date": "<test_date+1d>"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "create-quote",
+            "kind": "action",
+            "handler": "CreateBookingQuote",
+            "request": {
+                "booking_id": "booking-101"
+            }
+        }
+    ],
+    "assert": {
+        "code": "ERROR",
+        "message_contains": "check-in date must not be before today"
+    }
+}

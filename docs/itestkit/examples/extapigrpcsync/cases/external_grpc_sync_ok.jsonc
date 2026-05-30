@@ -1,0 +1,55 @@
+// The external API returns `SERVING`, and our API must return `SERVING`.
+{
+  "name": "api returns serving when external returns serving",
+  "steps": [
+    // Step 1 (prepare): configure external call sequence and mock responses.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCheck",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "order-100",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          }
+        ]
+      }
+    },
+    // Step 2 (action): one inbound API call to our service.
+    // During processing, the service executes all outbound calls from service_chain in order.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallAPI",
+      "request": {
+        "service_chain": [
+          // Inject expected_service from prepare response.
+          "{{steps.plan-external.response.calls.0.expected_service}}"
+        ]
+      }
+    },
+    // Step 3 (verify): confirm order and count of external calls.
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCheck",
+      "request": {
+        "expected_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}"
+        ],
+        "expected_calls": 1
+      }
+    }
+  ],
+  // Step 4 (assert): verify final response of our API (comparison target is the action step).
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "status": "SERVING"
+    }
+  }
+}

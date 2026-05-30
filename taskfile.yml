@@ -1,0 +1,23 @@
+version: "3"
+
+tasks:
+  test:
+    desc: "Run tests with race detector"
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: "Run golangci-lint"
+    cmds:
+      - golangci-lint run --config .golangci.yml
+      - |
+        if ! command -v ifaceguard >/dev/null 2>&1; then
+          go install github.com/n-r-w/ifaceguard/cmd/ifaceguard@latest
+        fi
+      - ifaceguard --config ifaceguard.cfg
+
+  fmt:
+    desc: "Format Go code"
+    cmds:
+      - go fmt ./...
+      - goimports -w .

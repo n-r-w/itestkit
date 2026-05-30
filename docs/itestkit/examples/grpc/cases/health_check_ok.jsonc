@@ -1,0 +1,21 @@
+{
+    "name": "grpc health check response contains SERVING",
+    "steps": [
+        {
+            "id": "action-check",
+            "kind": "action",
+            "handler": "Check",
+            "request": {
+                "service": ""
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "message_contains": "SERVING",
+        "response_from_step": "action-check",
+        "response": {
+            "status": "SERVING"
+        }
+    }
+}

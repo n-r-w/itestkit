@@ -1,0 +1,80 @@
+{
+    // Validate that action step publishes outbound message and verify sees exactly one match.
+    "name": "kafka outbound publish is observed and verified",
+    "steps": [
+        {
+            "id": "plan-outbound",
+            "kind": "prepare",
+            "handler": "PlanOutbound",
+            "request": {
+                "topic": "orders-outbound",
+                "headers": {
+                    "x-flow": "itest"
+                },
+                "expected_count": 1,
+                "payload_subset": {
+                    "event": "created",
+                    "order_id": "order-100"
+                }
+            }
+        },
+        {
+            "id": "send-event",
+            "kind": "action",
+            "handler": "SendOrderEvent",
+            "request": {
+                "topic": "orders-outbound",
+                "order_id": "order-100",
+                "status": "new",
+                "headers": {
+                    "x-flow": "itest"
+                }
+            }
+        },
+        {
+            "id": "await-outbound",
+            "kind": "await",
+            "handler": "AwaitOutbound",
+            "request": {},
+            "retry": {
+                "timeout_ms": 5000,
+                "interval_ms": 100,
+                "max_attempts": 50
+            }
+        },
+        {
+            "id": "verify-outbound",
+            "kind": "verify",
+            "handler": "VerifyOutbound",
+            "request": {}
+        },
+        {
+            "id": "cleanup-broker",
+            "kind": "cleanup",
+            "handler": "CleanupBroker",
+            "request": {}
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "verify-outbound",
+        "response": {
+            "matched_count": 1,
+            "observed_messages": [
+                {
+                    "topic": "orders-outbound",
+                    "headers": {
+                        "x-flow": "itest"
+                    },
+                    "payload": {
+                        "event": "created",
+                        "order_id": "order-100",
+                        "status": "new"
+                    },
+                    "offset": 0
+                }
+            ],
+            "last_mismatch_reason": ""
+        }
+    }
+}

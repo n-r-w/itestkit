@@ -1,0 +1,20 @@
+{
+    "name": "external adapter check ok",
+    "steps": [
+        {
+            "id": "action-1",
+            "kind": "action",
+            "handler": "CheckExternalThroughAdapter",
+            "request": {
+                "service": "adapter-demo"
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "action-1",
+        "response": {
+            "status": "SERVING"
+        }
+    }
+}

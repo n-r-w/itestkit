@@ -1,0 +1,70 @@
+{
+    // This case demonstrates explicit timezone syntax on non-default offsets.
+    // check-in/check-out use -05:00 to prove that timezone can shift the selected calendar day.
+    // quote expiration uses +09:30 to prove that timestamp macros can render a non-default offset.
+    "name": "booking quote uses explicit timezone macros",
+    "steps": [
+        {
+            "id": "seed-data",
+            "kind": "prepare",
+            "handler": "SeedData",
+            "request": {
+                "bookings": [
+                    {
+                        "booking_id": "booking-102",
+                        "hotel_id": "hotel-11",
+                        "check_in_date": "<test_date+8d@-05:00>",
+                        "check_out_date": "<test_date+10d@-05:00>"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "plan-external",
+            "kind": "prepare",
+            "handler": "PlanExternalQuote",
+            "request": {
+                "expected_request": {
+                    "hotel_id": "hotel-11",
+                    "check_in_date": "<test_date+8d@-05:00>",
+                    "check_out_date": "<test_date+10d@-05:00>",
+                    "requested_at": "<test_timestamp>"
+                },
+                "stub_response": {
+                    "rate_id": "rate-777",
+                    "expires_at": "<test_timestamp+1h15m@+09:30>"
+                }
+            }
+        },
+        {
+            "id": "create-quote",
+            "kind": "action",
+            "handler": "CreateBookingQuote",
+            "request": {
+                "booking_id": "booking-102"
+            }
+        },
+        {
+            "id": "verify-external",
+            "kind": "verify",
+            "handler": "VerifyExternalQuote",
+            "request": {
+                "booking_id": "booking-102"
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "create-quote",
+        "response": {
+            "booking_id": "booking-102",
+            "hotel_id": "hotel-11",
+            "check_in_date": "2026-03-08",
+            "check_out_date": "2026-03-10",
+            "nights": 2,
+            "days_until_check_in": 7,
+            "rate_id": "rate-777",
+            "quote_expires_at": "2026-03-01 07:45:00+09:30"
+        }
+    }
+}

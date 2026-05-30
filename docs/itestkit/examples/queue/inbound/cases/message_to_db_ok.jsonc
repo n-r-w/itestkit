@@ -1,0 +1,51 @@
+{
+    "name": "message pipeline persists order into db",
+    "description": "simulate kafka publish, consumer processing and db verification",
+    "steps": [
+        {
+            "id": "init-env",
+            "kind": "prepare",
+            "handler": "InitEnvironment",
+            "request": {}
+        },
+        {
+            "id": "publish-order",
+            "kind": "publish",
+            "handler": "PublishOrder",
+            "request": {
+                "order_id": "order-100",
+                "amount": 4200
+            }
+        },
+        {
+            "id": "await-consumer",
+            "kind": "await",
+            "handler": "AwaitConsumption",
+            "request": {
+                "order_id": "order-100"
+            },
+            "retry": {
+                "timeout_ms": 500,
+                "interval_ms": 10,
+                "max_attempts": 5
+            }
+        },
+        {
+            "id": "verify-db",
+            "kind": "verify",
+            "handler": "VerifyOrder",
+            "request": {
+                "order_id": "order-100"
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "verify-db",
+        "response": {
+            "order_id": "order-100",
+            "amount": 4200,
+            "stored": true
+        }
+    }
+}

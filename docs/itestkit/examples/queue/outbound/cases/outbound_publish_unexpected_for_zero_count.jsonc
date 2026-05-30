@@ -1,0 +1,52 @@
+{
+    // Negative scenario: with expected_count=0 any matching message must fail await step.
+    "name": "kafka outbound fails when message appears for expected zero count",
+    "steps": [
+        {
+            "id": "plan-outbound",
+            "kind": "prepare",
+            "handler": "PlanOutbound",
+            "request": {
+                "topic": "orders-outbound-zero",
+                "headers": {
+                    "x-flow": "itest"
+                },
+                "expected_count": 0
+            }
+        },
+        {
+            "id": "send-event",
+            "kind": "action",
+            "handler": "SendOrderEvent",
+            "request": {
+                "topic": "orders-outbound-zero",
+                "order_id": "order-200",
+                "status": "new",
+                "headers": {
+                    "x-flow": "itest"
+                }
+            }
+        },
+        {
+            "id": "await-outbound",
+            "kind": "await",
+            "handler": "AwaitOutbound",
+            "request": {},
+            "retry": {
+                "timeout_ms": 3000,
+                "interval_ms": 100,
+                "max_attempts": 30
+            }
+        },
+        {
+            "id": "cleanup-broker",
+            "kind": "cleanup",
+            "handler": "CleanupBroker",
+            "request": {}
+        }
+    ],
+    "assert": {
+        "code": "ERROR",
+        "message_contains": "expected_count=0"
+    }
+}

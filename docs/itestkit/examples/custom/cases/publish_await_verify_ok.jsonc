@@ -1,0 +1,40 @@
+{
+    "name": "publish await verify flow",
+    "steps": [
+        {
+            "id": "publish-1",
+            "kind": "publish",
+            "handler": "PublishEvent",
+            "request": {
+                "message": "event-42"
+            }
+        },
+        {
+            "id": "await-1",
+            "kind": "await",
+            "handler": "AwaitProcessed",
+            "request": {
+                "event_id": "event-42"
+            },
+            "retry": {
+                "timeout_ms": 300,
+                "interval_ms": 10,
+                "max_attempts": 5
+            }
+        },
+        {
+            "id": "verify-1",
+            "kind": "verify",
+            "handler": "VerifyState",
+            "request": {}
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "verify-1",
+        "response": {
+            "state": "processed",
+            "event_id": "event-42"
+        }
+    }
+}

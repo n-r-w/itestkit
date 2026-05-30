@@ -1,0 +1,69 @@
+// The external API returns `SERVICE_UNKNOWN`, and our API must return `SERVICE_UNKNOWN`.
+{
+  "name": "api returns service_unknown when external returns service_unknown",
+  "steps": [
+    // Step 1 (prepare): register three sequential outbound calls with different responses.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCheck",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "order-102-precheck",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "order-102-availability",
+            "stub_response": {
+              "status": "NOT_SERVING"
+            }
+          },
+          {
+            "expected_service": "order-102-fallback",
+            "stub_response": {
+              "status": "SERVICE_UNKNOWN"
+            }
+          }
+        ]
+      }
+    },
+    // Step 2 (action): call our service API; it synchronously calls the external API during processing.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallAPI",
+      "request": {
+        "service_chain": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}",
+          "{{steps.plan-external.response.calls.2.expected_service}}"
+        ]
+      }
+    },
+    // Step 3 (verify): validate external call fact and parameters as a side effect.
+    {
+      "id": "verify-external",
+      "kind": "verify",
+      "handler": "VerifyExternalCheck",
+      "request": {
+        "expected_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}",
+          "{{steps.plan-external.response.calls.2.expected_service}}"
+        ],
+        "expected_calls": 3
+      }
+    }
+  ],
+  // Step 4 (assert): the key check is our service API response.
+  "assert": {
+    "code": "OK",
+    "response_from_step": "call-api",
+    "response": {
+      "status": "SERVICE_UNKNOWN"
+    }
+  }
+}

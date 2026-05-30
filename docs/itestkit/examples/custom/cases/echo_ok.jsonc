@@ -1,0 +1,28 @@
+{
+  "name": "echo with prefix",
+  "steps": [
+    {
+      "id": "prepare-prefix",
+      "kind": "prepare",
+      "handler": "SetPrefix",
+      "request": {
+        "prefix": "hello "
+      }
+    },
+    {
+      "id": "action-echo",
+      "kind": "action",
+      "handler": "Echo",
+      "request": {
+        "message": "world"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "action-echo",
+    "response": {
+      "message": "hello world"
+    }
+  }
+}
