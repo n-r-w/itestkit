@@ -163,6 +163,24 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       6. Set explicit `assert.response_from_step` for deterministic assert target.
   </ext_api>
 
+  <httpmock>
+    How to test outbound HTTP calls:
+      1. Use `github.com/n-r-w/itestkit/httpmock` when the SUT accepts an outbound HTTP base URL.
+      2. Create `httpmock.NewServer(t)` in the per-case harness and expose `HTTPMock() *httpmock.Server`.
+      3. Use preset handlers: `PlanHTTPCalls`, `AwaitHTTPCalls`, `VerifyHTTPCalls`.
+      4. Fixture fields:
+        1) request: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `body`, `body_subset`, `raw_body`, `expected_count`
+        2) response: `response.status`, `response.headers`, `response.body`, `response.raw_body`
+        3) order: `ordering`
+      5. Allowed modes:
+        1) `query_mode`: `exact`, `subset`; empty means `exact`
+        2) `headers_mode`: `exact`, `subset`; empty means `exact`
+        3) `ordering`: `strict`, `any`; empty means `any`
+      6. Set only one of `body`, `body_subset`, and `raw_body` per expected request.
+      7. Use `body_subset` for JSON subset matching and `raw_body` for exact string matching.
+      8. For success checks, set `assert.response_from_step` to the action or verify step that owns the expected response.
+  </httpmock>
+
   <kafka>
     How to test Kafka interactions:
       1. For producer/outbound, use `queue/kafkaproducer.StartSuite(...)` for suite-level broker setup and `suite.NewHarness(...)` for case-level isolation.
@@ -224,12 +242,13 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       2. [Custom itestkit implementation](examples/custom)
       3. [In-memory queue consumer and DB simulation](examples/queue/inbound)
       4. [Kafka outbound producer preset](examples/queue/outbound)
-      5. [Synchronous external API call](examples/extapisync)
-        6. [Calendar macros + now-provider in SUT](examples/bookingcalendar)
-        7. [Asynchronous external API call](examples/extapiasync)
-        8. [Synchronous external gRPC API call](examples/extapigrpcsync)
-        9. [Complex project with grpc api, external api call, database and itests](examples/real)
-        10. [Adapter-style external gRPC call (target + dial options)](examples/extapigrpcadapter)
+      5. [Outbound HTTP mock](examples/httpmock)
+      6. [Synchronous external API call](examples/extapisync)
+      7. [Calendar macros + now-provider in SUT](examples/bookingcalendar)
+      8. [Asynchronous external API call](examples/extapiasync)
+      9. [Synchronous external gRPC API call](examples/extapigrpcsync)
+      10. [Complex project with grpc api, external api call, database and itests](examples/real)
+      11. [Adapter-style external gRPC call (target + dial options)](examples/extapigrpcadapter)
   </examples>
 
 </itestkit_usage>
