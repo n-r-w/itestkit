@@ -169,6 +169,36 @@ func TestEvaluateVerify_OrderingAnyAndCount(t *testing.T) {
 	require.Contains(t, verifyErr.Error(), "expected matched_count=2")
 }
 
+// TestEvaluateVerify_PayloadSubsetNestedSemantics locks the JSON subset rules used by queue probes.
+func TestEvaluateVerify_PayloadSubsetNestedSemantics(t *testing.T) {
+	t.Parallel()
+
+	expectation, err := NormalizeExpectation(OutboundExpectation{
+		Topic:         "orders",
+		Key:           nil,
+		Headers:       nil,
+		HeadersMode:   "",
+		ExpectedCount: 1,
+		Payload:       nil,
+		PayloadSubset: rawJSON(t, `{"meta":{"source":"api"},"items":[{"sku":"sku-1"}]}`),
+		Ordering:      OrderingAny,
+	})
+	require.NoError(t, err)
+
+	result, verifyErr := EvaluateVerify(expectation, []Message{
+		newMessage(
+			t,
+			"orders",
+			"",
+			nil,
+			`{"meta":{"source":"api","trace":"trace-1"},"items":[{"sku":"sku-1","qty":2},{"sku":"sku-2"}]}`,
+			1,
+		),
+	})
+	require.NoError(t, verifyErr)
+	require.Equal(t, 1, result.MatchedCount)
+}
+
 // TestEvaluateAwait_ZeroExpectedCountWindowSemantics checks the expected_count=0 await semantics.
 func TestEvaluateAwait_ZeroExpectedCountWindowSemantics(t *testing.T) {
 	t.Parallel()

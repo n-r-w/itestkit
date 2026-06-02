@@ -229,9 +229,41 @@ Additional packages:
 
 - `github.com/n-r-w/itestkit/grpc` — gRPC handler helpers and protobuf JSON normalization;
 - `github.com/n-r-w/itestkit/grpc/bufconn` — in-memory gRPC server/client helpers;
+- `github.com/n-r-w/itestkit/httpmock` — JSONC-driven outbound HTTP mock server;
 - `github.com/n-r-w/itestkit/testcalendar` — deterministic date and timestamp macros for JSONC cases;
 - `github.com/n-r-w/itestkit/queue/kafkaproducer` — Kafka producer test harness;
 - `github.com/n-r-w/itestkit/queue/itest` — ready-made queue step registry.
+
+## HTTP mock helper
+
+Use `httpmock.NewServer(t)` in a per-case harness when the system under test needs a base URL for outbound HTTP calls. The harness must expose `HTTPMock() *httpmock.Server` for preset handlers.
+
+Preset handlers:
+
+- `PlanHTTPCalls` — stores expected requests and stub responses;
+- `AwaitHTTPCalls` — checks whether planned requests have been observed;
+- `VerifyHTTPCalls` — performs the final request verification.
+
+Plan fields:
+
+- request match: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `body`, `body_subset`, `raw_body`, `expected_count`;
+- response stub: `response.status`, `response.headers`, `response.body`, `response.raw_body`;
+- ordering: `ordering` with values `strict` and `any`.
+
+Mode values:
+
+- `query_mode`: `exact`, `subset`; empty means `exact`;
+- `headers_mode`: `exact`, `subset`; empty means `exact`;
+- `ordering`: `strict`, `any`; empty means `any`.
+
+Body rules:
+
+- `body` is exact JSON matching;
+- `body_subset` is JSON subset matching;
+- `raw_body` is exact string matching;
+- set only one of `body`, `body_subset`, and `raw_body` per request expectation.
+
+See `docs/itestkit/examples/httpmock` for a complete JSONC example.
 
 ## LLM skill
 
@@ -239,6 +271,7 @@ Additional packages:
 - `docs/itestkit/examples/custom` — minimal custom integration;
 - `docs/itestkit/examples/grpc` — gRPC client integration;
 - `docs/itestkit/examples/extapigrpcadapter` — adapter-style gRPC target and dial options;
+- `docs/itestkit/examples/httpmock` — outbound HTTP mock flow;
 - `docs/itestkit/examples/queue/inbound` — inbound queue flow;
 - `docs/itestkit/examples/queue/outbound` — outbound Kafka flow;
 - `docs/itestkit/examples/bookingcalendar` — calendar macros and fixed test time;

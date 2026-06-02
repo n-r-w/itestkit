@@ -1,0 +1,67 @@
+{
+  // Plan an outbound charge request, run the action, then verify the HTTP call journal.
+  "name": "http outbound charge is stubbed and verified",
+  "steps": [
+    {
+      "id": "plan-http",
+      "kind": "prepare",
+      "handler": "PlanHTTPCalls",
+      "request": {
+        "calls": [
+          {
+            "name": "charge-order",
+            "expected_count": 1,
+            "method": "POST",
+            "path": "/charges",
+            "query": {
+              "dry_run": ["false"]
+            },
+            "headers": {
+              "Content-Type": ["application/json"],
+              "X-Request-ID": ["order-1"]
+            },
+            "headers_mode": "subset",
+            "body_subset": {
+              "order_id": "order-1",
+              "amount": 100
+            },
+            "response": {
+              "status": 200,
+              "headers": {
+                "Content-Type": ["application/json"]
+              },
+              "body": {
+                "result": "approved",
+                "approval_code": "A-1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "create-order",
+      "kind": "action",
+      "handler": "CreateOrder",
+      "request": {
+        "order_id": "order-1",
+        "amount": 100
+      }
+    },
+    {
+      "id": "verify-http",
+      "kind": "verify",
+      "handler": "VerifyHTTPCalls",
+      "request": {}
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "create-order",
+    "response": {
+      "order_id": "order-1",
+      "external": "approved",
+      "approval_code": "A-1"
+    }
+  }
+}

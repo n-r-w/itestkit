@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/n-r-w/itestkit/internal/jsonsubset"
 )
 
 const (
@@ -414,68 +416,12 @@ func matchesPayloadSubset(actualRaw, subsetRaw json.RawMessage) (matched bool, m
 		return false, "", errors.New("payload subset is not a JSON object")
 	}
 
-	mismatchPath, mismatchReason, matched := jsonSubsetMatch(actualMap, subsetMap, "payload")
+	mismatchPath, mismatchReason, matched := jsonsubset.Match(actualMap, subsetMap, "payload")
 	if matched {
 		return true, "", nil
 	}
 
 	return false, fmt.Sprintf("payload subset mismatch at %s: %s", mismatchPath, mismatchReason), nil
-}
-
-// jsonSubsetMatch recursively compares the expected subset with the actual value.
-func jsonSubsetMatch(actual, expected any, path string) (mismatchPath, mismatchReason string, matched bool) {
-	switch expectedTyped := expected.(type) {
-	case map[string]any:
-		actualMap, ok := actual.(map[string]any)
-		if !ok {
-			return path, "actual value is not object", false
-		}
-
-		for key, expectedValue := range expectedTyped {
-			actualValue, exists := actualMap[key]
-			if !exists {
-				return path + "." + key, "key is missing", false
-			}
-
-			nestedPath, nestedReason, nestedMatched := jsonSubsetMatch(actualValue, expectedValue, path+"."+key)
-			if !nestedMatched {
-				return nestedPath, nestedReason, false
-			}
-		}
-
-		return "", "", true
-	case []any:
-		actualSlice, ok := actual.([]any)
-		if !ok {
-			return path, "actual value is not array", false
-		}
-		if len(actualSlice) < len(expectedTyped) {
-			reason := fmt.Sprintf(
-				"actual array length %d is less than expected %d",
-				len(actualSlice),
-				len(expectedTyped),
-			)
-			return path, reason, false
-		}
-
-		for index, expectedValue := range expectedTyped {
-			nestedPath, nestedReason, nestedMatched := jsonSubsetMatch(
-				actualSlice[index],
-				expectedValue,
-				fmt.Sprintf("%s[%d]", path, index),
-			)
-			if !nestedMatched {
-				return nestedPath, nestedReason, false
-			}
-		}
-
-		return "", "", true
-	default:
-		if reflect.DeepEqual(actual, expected) {
-			return "", "", true
-		}
-		return path, fmt.Sprintf("expected %v, got %v", expected, actual), false
-	}
 }
 
 // decodeStrictJSONAny decodes JSON to any and rejects trailing data.
