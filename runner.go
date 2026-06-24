@@ -24,17 +24,20 @@ import (
 	"github.com/n-r-w/itestkit/internal/protojsonview"
 )
 
-// DefaultParallelCasesLimit sets the default limit of parallel cases when parallel mode is enabled.
-const DefaultParallelCasesLimit = 10
-
-// DefaultJSONDiffContextLines specifies the number of context lines in the JSON-like diff output.
-const DefaultJSONDiffContextLines = 3
-
-// responseDumpEnvVar specifies the name of the case for which a JSON dump of the actual response is needed.
-const responseDumpEnvVar = "ITESTKIT_RESPONSE_DUMP"
-
-// partialResponseAbsentMarker marks a field that must not exist in the normalized response.
-const partialResponseAbsentMarker = "<itestkit_absent>"
+const (
+	// DefaultParallelCasesLimit sets the default limit of parallel cases when parallel mode is enabled.
+	DefaultParallelCasesLimit = 10
+	// DefaultJSONDiffContextLines specifies the number of context lines in the JSON-like diff output.
+	DefaultJSONDiffContextLines = 3
+	// responseDumpEnvVar specifies the name of the case for which a JSON dump of the actual response is needed.
+	responseDumpEnvVar = "ITESTKIT_RESPONSE_DUMP"
+	// diffExpectedFileName labels the expected response side in unified diffs.
+	diffExpectedFileName = "expected"
+	// diffActualFileName labels the actual response side in unified diffs.
+	diffActualFileName = "actual"
+	// partialResponseAbsentMarker marks a field that must not exist in the normalized response.
+	partialResponseAbsentMarker = "<itestkit_absent>"
+)
 
 // RunCasesOption configures the behavior of RunCases.
 type RunCasesOption func(*runCasesConfig)
@@ -879,10 +882,10 @@ func jsonLikeDiff(expected, actual any) (string, error) {
 
 	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A:        difflib.SplitLines(expectedJSON),
-		FromFile: "expected",
+		FromFile: diffExpectedFileName,
 		FromDate: "",
 		B:        difflib.SplitLines(actualJSON),
-		ToFile:   "actual",
+		ToFile:   diffActualFileName,
 		ToDate:   "",
 		Eol:      "",
 		Context:  DefaultJSONDiffContextLines,

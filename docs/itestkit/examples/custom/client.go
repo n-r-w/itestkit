@@ -2,7 +2,14 @@ package custom
 
 import "context"
 
-const awaitProcessedSuccessAttempt = 2
+const (
+	// awaitProcessedSuccessAttempt defines the await polling attempt when processing completes successfully.
+	awaitProcessedSuccessAttempt = 2
+	// customStatePending marks an event that is not processed yet.
+	customStatePending = "pending"
+	// customStateProcessed marks an event that has been processed.
+	customStateProcessed = "processed"
+)
 
 // setPrefixRequest describes a prefix update for client messages.
 type setPrefixRequest struct {
@@ -93,7 +100,7 @@ func (client *echoClient) AwaitProcessed(
 
 	client.awaitAttempt++
 	if client.awaitAttempt < awaitProcessedSuccessAttempt {
-		return &awaitProcessedResponse{State: "pending"}, statusError{
+		return &awaitProcessedResponse{State: customStatePending}, statusError{
 			code:    statusFailed,
 			message: "event is not processed yet",
 		}
@@ -101,14 +108,14 @@ func (client *echoClient) AwaitProcessed(
 
 	client.processed = true
 
-	return &awaitProcessedResponse{State: "processed"}, nil
+	return &awaitProcessedResponse{State: customStateProcessed}, nil
 }
 
 // VerifyState returns the final state validated in assert.
 func (client *echoClient) VerifyState(_ context.Context, _ *verifyStateRequest) (*verifyStateResponse, error) {
-	state := "pending"
+	state := customStatePending
 	if client.processed {
-		state = "processed"
+		state = customStateProcessed
 	}
 
 	return &verifyStateResponse{State: state, EventID: client.publishedID}, nil

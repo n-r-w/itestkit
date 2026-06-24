@@ -151,12 +151,17 @@ func newConfig() config {
 
 // dialOptionsForListener generates basic dial options for connecting to bufconn listener.
 func dialOptionsForListener(listener *bufconn.Listener, extraOptions ...grpc.DialOption) []grpc.DialOption {
-	options := []grpc.DialOption{
+	// baseDialOptionsCount covers the bufconn dialer and transport credentials.
+	const baseDialOptionsCount = 2
+
+	options := make([]grpc.DialOption, 0, baseDialOptionsCount+len(extraOptions))
+	options = append(
+		options,
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return listener.DialContext(ctx)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
+	)
 
 	return append(options, extraOptions...)
 }

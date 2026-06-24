@@ -7,8 +7,14 @@ import (
 	"slices"
 )
 
-// asyncProcessReadyAttempt defines the await polling attempt when processing completes successfully.
-const asyncProcessReadyAttempt = 2
+const (
+	// asyncProcessReadyAttempt defines the await polling attempt when processing completes successfully.
+	asyncProcessReadyAttempt = 2
+	// asyncOrderStatePending marks an order waiting for external synchronization.
+	asyncOrderStatePending = "pending"
+	// asyncOrderStateProcessed marks an order synchronized with the external system.
+	asyncOrderStateProcessed = "processed"
+)
 
 // seedOrder describes a record to preload into the in-memory "DB".
 type seedOrder struct {
@@ -206,7 +212,7 @@ func (client *asyncClient) AwaitExternalSync(
 	if order.Processed {
 		return &awaitExternalSyncResponse{
 			OrderID:  request.OrderID,
-			State:    "processed",
+			State:    asyncOrderStateProcessed,
 			Attempts: client.workerAttempts[request.OrderID],
 		}, nil
 	}
@@ -226,7 +232,7 @@ func (client *asyncClient) AwaitExternalSync(
 	if attempt < asyncProcessReadyAttempt {
 		return &awaitExternalSyncResponse{
 				OrderID:  request.OrderID,
-				State:    "pending",
+				State:    asyncOrderStatePending,
 				Attempts: attempt,
 			}, asyncStatusError{
 				code:    asyncStatusFailed,
@@ -239,7 +245,7 @@ func (client *asyncClient) AwaitExternalSync(
 	if err != nil {
 		return &awaitExternalSyncResponse{
 				OrderID:  request.OrderID,
-				State:    "pending",
+				State:    asyncOrderStatePending,
 				Attempts: attempt,
 			}, asyncStatusError{
 				code:    asyncStatusFailed,
@@ -255,7 +261,7 @@ func (client *asyncClient) AwaitExternalSync(
 
 	return &awaitExternalSyncResponse{
 		OrderID:  request.OrderID,
-		State:    "processed",
+		State:    asyncOrderStateProcessed,
 		Attempts: attempt,
 	}, nil
 }

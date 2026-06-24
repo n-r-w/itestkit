@@ -31,6 +31,8 @@ type Server struct {
 	passThrough         http.Handler
 }
 
+var _ http.Handler = (*Server)(nil)
+
 type config struct {
 	maxRequestBodyBytes int64
 }
