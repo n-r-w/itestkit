@@ -551,6 +551,102 @@ func TestRunCases_PartialResponseReportsMissingField(t *testing.T) {
 	require.Contains(t, err.Error(), "missing field")
 }
 
+// TestRunCases_PartialResponseAbsentMarkerAllowsMissingField checks that the absence marker passes
+// when the actual object does not contain the marked field.
+func TestRunCases_PartialResponseAbsentMarkerAllowsMissingField(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"status": "SERVING",
+	}
+	expected := map[string]any{
+		"status": "SERVING",
+		"debug":  partialResponseAbsentMarker,
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseAbsentMarkerRejectsPresentField checks that the absence marker fails
+// when the actual object contains the marked field.
+func TestRunCases_PartialResponseAbsentMarkerRejectsPresentField(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"status": "SERVING",
+		"debug":  "trace",
+	}
+	expected := map[string]any{
+		"status": "SERVING",
+		"debug":  partialResponseAbsentMarker,
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.debug")
+	require.Contains(t, err.Error(), "field must be absent")
+}
+
+// TestRunCases_PartialResponseAbsentMarkerRejectsNullField checks that null is treated as a present value,
+// not as an absent field.
+func TestRunCases_PartialResponseAbsentMarkerRejectsNullField(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"status": "SERVING",
+		"debug":  nil,
+	}
+	expected := map[string]any{
+		"status": "SERVING",
+		"debug":  partialResponseAbsentMarker,
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.debug")
+	require.Contains(t, err.Error(), "field must be absent")
+}
+
+// TestRunCases_PartialResponseAbsentMarkerWorksInNestedArrayObject checks that the absence marker can be
+// used inside objects that are compared through the existing strict array matching.
+func TestRunCases_PartialResponseAbsentMarkerWorksInNestedArrayObject(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"items": []any{
+			map[string]any{
+				"id": "1",
+			},
+		},
+	}
+	expected := map[string]any{
+		"items": []any{
+			map[string]any{
+				"id":     "1",
+				"secret": partialResponseAbsentMarker,
+			},
+		},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseAbsentMarkerRequiresObjectField checks that the absence marker is rejected
+// when it is not used as an object field value.
+func TestRunCases_PartialResponseAbsentMarkerRequiresObjectField(t *testing.T) {
+	t.Parallel()
+
+	err := runPartialResponseCase(t, "present value", partialResponseAbsentMarker)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$: absence marker can be used only as an object field value")
+
+	err = runPartialResponseCase(t, []any{"present value"}, []any{partialResponseAbsentMarker})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$[0]: absence marker can be used only as an object field value")
+}
+
 // TestRunCases_PartialResponseKeepsStrictArrayLength checks that the mode is `partial`
 // does not turn arrays into subsets and does not skip extra elements.
 func TestRunCases_PartialResponseKeepsStrictArrayLength(t *testing.T) {

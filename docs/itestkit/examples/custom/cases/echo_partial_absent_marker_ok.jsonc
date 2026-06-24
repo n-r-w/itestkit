@@ -1,0 +1,31 @@
+{
+  "name": "echo partial response with absent debug field",
+  "steps": [
+    {
+      "id": "prepare-prefix",
+      "kind": "prepare",
+      "handler": "SetPrefix",
+      "request": {
+        "prefix": "hello "
+      }
+    },
+    {
+      "id": "action-echo",
+      "kind": "action",
+      "handler": "Echo",
+      "request": {
+        "message": "world"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "action-echo",
+    "response_mode": "partial",
+    "response": {
+      "message": "hello world",
+      // The absence marker checks that the normalized response does not expose a debug field.
+      "debug": "<itestkit_absent>"
+    }
+  }
+}
