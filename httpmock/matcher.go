@@ -43,20 +43,10 @@ func evaluateStrict(plan Plan, observed []ObservedRequest, final bool) (CheckRes
 	}
 
 	if len(observed) > len(expected) {
-		lastExpected := expected[len(expected)-1]
-		if lastExpected.CountMode != CountModeAtLeast {
-			if final {
-				return result, fmt.Errorf("expected observed request count=%d, got %d", len(expected), len(observed))
-			}
-		} else {
-			for index := len(expected); index < len(observed); index++ {
-				matched, reason := matchesCall(lastExpected, observed[index])
-				if !matched {
-					result.LastMismatchReason = reason
-					return result, fmt.Errorf("strict ordering mismatch at request %d: %s", index, reason)
-				}
-				result.MatchedCount++
-			}
+		var err error
+		result, err = evaluateStrictExtraObserved(result, expected, observed, final)
+		if err != nil {
+			return result, err
 		}
 	}
 
@@ -67,6 +57,32 @@ func evaluateStrict(plan Plan, observed []ObservedRequest, final bool) (CheckRes
 		return result, fmt.Errorf("expected observed request count=%d, got %d", len(expected), len(observed))
 	}
 
+	return result, nil
+}
+
+// evaluateStrictExtraObserved checks requests that exceed the expanded strict plan.
+func evaluateStrictExtraObserved(
+	result CheckResult,
+	expected []CallExpectation,
+	observed []ObservedRequest,
+	final bool,
+) (CheckResult, error) {
+	lastExpected := expected[len(expected)-1]
+	if lastExpected.CountMode != CountModeAtLeast && final {
+		return result, fmt.Errorf("expected observed request count=%d, got %d", len(expected), len(observed))
+	}
+	if lastExpected.CountMode != CountModeAtLeast {
+		return result, nil
+	}
+
+	for index := len(expected); index < len(observed); index++ {
+		matched, reason := matchesCall(lastExpected, observed[index])
+		if !matched {
+			result.LastMismatchReason = reason
+			return result, fmt.Errorf("strict ordering mismatch at request %d: %s", index, reason)
+		}
+		result.MatchedCount++
+	}
 	return result, nil
 }
 
@@ -252,7 +268,12 @@ func matchBody(call CallExpectation, request ObservedRequest) (matched bool, mis
 }
 
 // matchFormBody checks application/x-www-form-urlencoded bodies without depending on parameter order.
-func matchFormBody(field string, mode QueryMode, expected map[string][]string, actualRaw string) (bool, string) {
+func matchFormBody(
+	field string,
+	mode QueryMode,
+	expected map[string][]string,
+	actualRaw string,
+) (matched bool, mismatchReason string) {
 	actual, err := url.ParseQuery(actualRaw)
 	if err != nil {
 		return false, fmt.Sprintf("%s mismatch: parse actual form body: %v", field, err)

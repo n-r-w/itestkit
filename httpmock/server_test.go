@@ -100,7 +100,10 @@ func TestServer_PassThroughDelegatesToWrappedHandler(t *testing.T) {
 
 	server := NewPassThroughServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		body, err := io.ReadAll(request.Body)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+			return
+		}
 		assert.JSONEq(t, `{"order_id":"order-1","amount":100}`, string(body))
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusAccepted)
@@ -412,18 +415,21 @@ func testPlan(ordering Ordering, calls ...CallExpectation) Plan {
 // testCall returns a call expectation with all fields initialized for lint compatibility.
 func testCall(method, path string, response Response) CallExpectation {
 	return CallExpectation{
-		Name:          "",
-		ExpectedCount: 1,
-		Method:        method,
-		Path:          path,
-		Query:         nil,
-		QueryMode:     "",
-		Headers:       nil,
-		HeadersMode:   "",
-		Body:          nil,
-		BodySubset:    nil,
-		RawBody:       nil,
-		Response:      response,
+		Name:           "",
+		ExpectedCount:  1,
+		CountMode:      "",
+		Method:         method,
+		Path:           path,
+		Query:          nil,
+		QueryMode:      "",
+		Headers:        nil,
+		HeadersMode:    "",
+		Body:           nil,
+		BodySubset:     nil,
+		RawBody:        nil,
+		FormBody:       nil,
+		FormBodySubset: nil,
+		Response:       response,
 	}
 }
 

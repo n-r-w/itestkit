@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	templatePrefix      = "{{"
-	templateSuffix      = "}}"
-	templateStepsPrefix = "steps."
-	templateMinParts    = 2
-	templatePathOffset  = 2
+	templatePrefix          = "{{"
+	templateSuffix          = "}}"
+	templateStepsPrefix     = "steps."
+	templateResponseSegment = "response"
+	templateMinParts        = 2
+	templatePathOffset      = 2
 )
 
 // stepDynamicRequest stores the raw request JSON with templates for links to the step output.
@@ -154,7 +155,7 @@ func parseStepTemplateReference(rawValue string) (stepTemplateReference, bool, e
 	if stepID == "" {
 		return emptyReference, false, fmt.Errorf("unsupported request template %q: step id is empty", rawValue)
 	}
-	if parts[1] != "response" {
+	if parts[1] != templateResponseSegment {
 		return emptyReference, false, fmt.Errorf(
 			"unsupported request template %q: expected .response after step id",
 			rawValue,

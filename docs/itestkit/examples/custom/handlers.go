@@ -83,9 +83,13 @@ func (echoHandler) Invoke(ctx context.Context, client *echoClient, request any) 
 	return client.Echo(ctx, typedRequest)
 }
 
-// NormalizeResponse returns the response as a struct for stable comparison.
+// NormalizeResponse returns Echo response as a JSON-like object for exact and partial comparison.
 func (echoHandler) NormalizeResponse(response any) (any, error) {
-	return response, nil
+	typedResponse, ok := response.(*echoResponse)
+	if !ok {
+		return nil, fmt.Errorf("Echo received invalid response type: %T", response)
+	}
+	return map[string]any{"message": typedResponse.Message}, nil
 }
 
 // publishEventHandler binds the publish step to event publication in the mock event flow.

@@ -24,14 +24,20 @@ import (
 	"github.com/n-r-w/itestkit/internal/protojsonview"
 )
 
-// DefaultParallelCasesLimit sets the default limit of parallel cases when parallel mode is enabled.
-const DefaultParallelCasesLimit = 10
-
-// DefaultJSONDiffContextLines specifies the number of context lines in the JSON-like diff output.
-const DefaultJSONDiffContextLines = 3
-
-// responseDumpEnvVar specifies the name of the case for which a JSON dump of the actual response is needed.
-const responseDumpEnvVar = "ITESTKIT_RESPONSE_DUMP"
+const (
+	// DefaultParallelCasesLimit sets the default limit of parallel cases when parallel mode is enabled.
+	DefaultParallelCasesLimit = 10
+	// DefaultJSONDiffContextLines specifies the number of context lines in the JSON-like diff output.
+	DefaultJSONDiffContextLines = 3
+	// responseDumpEnvVar specifies the name of the case for which a JSON dump of the actual response is needed.
+	responseDumpEnvVar = "ITESTKIT_RESPONSE_DUMP"
+	// diffExpectedFileName labels the expected response side in unified diffs.
+	diffExpectedFileName = "expected"
+	// diffActualFileName labels the actual response side in unified diffs.
+	diffActualFileName = "actual"
+	// partialResponseAbsentMarker marks a field that must not exist in the normalized response.
+	partialResponseAbsentMarker = "<itestkit_absent>"
+)
 
 // RunCasesOption configures the behavior of RunCases.
 type RunCasesOption func(*runCasesConfig)
@@ -745,49 +751,75 @@ func assertPartialResponseMatch(sourcePath string, expectedPartial, actualNormal
 
 // comparePartialResponseValue recursively compares JSON-like response values ​​in `partial` mode.
 func comparePartialResponseValue(path string, expected, actual any) error {
+	if isPartialResponseAbsentMarker(expected) {
+		return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
+	}
+
 	switch expectedValue := expected.(type) {
 	case map[string]any:
-		actualValue, ok := actual.(map[string]any)
-		if !ok {
-			return fmt.Errorf("%s: type mismatch: expected object %v, actual %v (%T)", path, expected, actual, actual)
-		}
-		for key, nestedExpected := range expectedValue {
-			nestedPath := partialResponsePath(path, key)
-			nestedActual, exists := actualValue[key]
-			if !exists {
-				return fmt.Errorf(
-					"%s: missing field: expected %v (%T), actual <missing>",
-					nestedPath,
-					nestedExpected,
-					nestedExpected,
-				)
-			}
-			if err := comparePartialResponseValue(nestedPath, nestedExpected, nestedActual); err != nil {
-				return err
-			}
-		}
-		return nil
+		return comparePartialResponseObject(path, expectedValue, actual)
 	case []any:
-		actualValue, ok := actual.([]any)
-		if !ok {
-			return fmt.Errorf("%s: type mismatch: expected array %v, actual %v (%T)", path, expected, actual, actual)
-		}
-		if len(expectedValue) != len(actualValue) {
-			return fmt.Errorf("%s: array length mismatch: expected %d, actual %d", path, len(expectedValue), len(actualValue))
-		}
-		for index, nestedExpected := range expectedValue {
-			nestedPath := fmt.Sprintf("%s[%d]", path, index)
-			if err := comparePartialResponseValue(nestedPath, nestedExpected, actualValue[index]); err != nil {
-				return err
-			}
-		}
-		return nil
+		return comparePartialResponseArray(path, expectedValue, actual)
 	default:
 		if !reflect.DeepEqual(expected, actual) {
 			return fmt.Errorf("%s: value mismatch: expected %v (%T), actual %v (%T)", path, expected, expected, actual, actual)
 		}
 		return nil
 	}
+}
+
+// comparePartialResponseObject compares expected object fields and allows absence markers as field values.
+func comparePartialResponseObject(path string, expected map[string]any, actual any) error {
+	actualValue, ok := actual.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: type mismatch: expected object %v, actual %v (%T)", path, expected, actual, actual)
+	}
+	for key, nestedExpected := range expected {
+		nestedPath := partialResponsePath(path, key)
+		nestedActual, exists := actualValue[key]
+		if isPartialResponseAbsentMarker(nestedExpected) {
+			if exists {
+				return fmt.Errorf("%s: field must be absent: found %v (%T)", nestedPath, nestedActual, nestedActual)
+			}
+			continue
+		}
+		if !exists {
+			return fmt.Errorf(
+				"%s: missing field: expected %v (%T), actual <missing>",
+				nestedPath,
+				nestedExpected,
+				nestedExpected,
+			)
+		}
+		if err := comparePartialResponseValue(nestedPath, nestedExpected, nestedActual); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// comparePartialResponseArray compares arrays by length, order, and nested values.
+func comparePartialResponseArray(path string, expected []any, actual any) error {
+	actualValue, ok := actual.([]any)
+	if !ok {
+		return fmt.Errorf("%s: type mismatch: expected array %v, actual %v (%T)", path, expected, actual, actual)
+	}
+	if len(expected) != len(actualValue) {
+		return fmt.Errorf("%s: array length mismatch: expected %d, actual %d", path, len(expected), len(actualValue))
+	}
+	for index, nestedExpected := range expected {
+		nestedPath := fmt.Sprintf("%s[%d]", path, index)
+		if err := comparePartialResponseValue(nestedPath, nestedExpected, actualValue[index]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isPartialResponseAbsentMarker reports whether the expected value asks to verify field absence.
+func isPartialResponseAbsentMarker(expected any) bool {
+	expectedString, ok := expected.(string)
+	return ok && expectedString == partialResponseAbsentMarker
 }
 
 // partialResponsePath appends the field name to the JSON-like path.
@@ -850,10 +882,10 @@ func jsonLikeDiff(expected, actual any) (string, error) {
 
 	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A:        difflib.SplitLines(expectedJSON),
-		FromFile: "expected",
+		FromFile: diffExpectedFileName,
 		FromDate: "",
 		B:        difflib.SplitLines(actualJSON),
-		ToFile:   "actual",
+		ToFile:   diffActualFileName,
 		ToDate:   "",
 		Eol:      "",
 		Context:  DefaultJSONDiffContextLines,

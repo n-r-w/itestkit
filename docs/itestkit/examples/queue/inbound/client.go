@@ -2,8 +2,14 @@ package queue
 
 import "context"
 
-// consumeReadyAttempt defines the attempt on which the consumer starts processing successfully.
-const consumeReadyAttempt = 2
+const (
+	// consumeReadyAttempt defines the attempt on which the consumer starts processing successfully.
+	consumeReadyAttempt = 2
+	// queueOrderStatePending marks a published order waiting for consumption.
+	queueOrderStatePending = "pending"
+	// queueOrderStateProcessed marks an order stored by the consumer.
+	queueOrderStateProcessed = "processed"
+)
 
 // initEnvironmentRequest describes an in-memory environment setup step.
 type initEnvironmentRequest struct{}
@@ -108,7 +114,7 @@ func (client *queueClient) AwaitConsumption(
 	request *awaitConsumptionRequest,
 ) (*awaitConsumptionResponse, error) {
 	if _, alreadyStored := client.storedOrders[request.OrderID]; alreadyStored {
-		return &awaitConsumptionResponse{State: "processed"}, nil
+		return &awaitConsumptionResponse{State: queueOrderStateProcessed}, nil
 	}
 
 	message, exists := client.findBrokerMessage(request.OrderID)
@@ -121,7 +127,7 @@ func (client *queueClient) AwaitConsumption(
 
 	client.consumerAttempts[request.OrderID]++
 	if client.consumerAttempts[request.OrderID] < consumeReadyAttempt {
-		return &awaitConsumptionResponse{State: "pending"}, queueStatusError{
+		return &awaitConsumptionResponse{State: queueOrderStatePending}, queueStatusError{
 			code:    queueStatusFailed,
 			message: "consumer has not processed message yet",
 		}
@@ -129,7 +135,7 @@ func (client *queueClient) AwaitConsumption(
 
 	client.storedOrders[request.OrderID] = storedOrder(message)
 
-	return &awaitConsumptionResponse{State: "processed"}, nil
+	return &awaitConsumptionResponse{State: queueOrderStateProcessed}, nil
 }
 
 // VerifyOrder reads the in-memory DB and returns a stored record for final assert.
