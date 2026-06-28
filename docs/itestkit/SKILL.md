@@ -173,12 +173,15 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       4. Fixture request fields:
         1) `method`, `path`, `query`, `headers`, `body`, `raw_body`
         2) `use_cookies`
-        3) `capture_headers`, `capture_cookies`
+        3) `csrf.cookie`, `csrf.header`
+        4) `capture_headers`, `capture_cookies`
       5. Set only one of `body` and `raw_body`.
       6. If cases need cookie reuse across steps, create `httpserver.NewCookieJar()` per case and expose `HTTPCookieJar() *httpserver.CookieJar` from the harness. Do not share one jar between cases.
-      7. JSON response bodies are decoded to JSON-safe values. Non-JSON response bodies are normalized as trimmed strings.
-      8. Use `httpserver.WithBaseURL(...)` when the handler uses request host.
-      9. For success checks, set `assert.response_from_step` to the `CallHTTP` step when it is not the last action step.
+      7. Use `csrf` only for valid CSRF flows where a stored cookie must become a request header. `CallHTTP` fails if the cookie is missing or the same header is already set manually.
+      8. Keep missing and mismatch CSRF cases explicit with `headers`, `use_cookies`, or neither. Do not use `csrf` for those negative cases.
+      9. JSON response bodies are decoded to JSON-safe values. Non-JSON response bodies are normalized as trimmed strings.
+      10. Use `httpserver.WithBaseURL(...)` when the handler uses request host.
+      11. For success checks, set `assert.response_from_step` to the `CallHTTP` step when it is not the last action step.
   </httpserver>
 
   <httpmock>

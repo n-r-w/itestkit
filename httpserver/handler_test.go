@@ -166,6 +166,106 @@ func TestCallHandlerKeepsCookiesInCaseJar(t *testing.T) {
 	}, meNormalized)
 }
 
+// TestCallHandlerSetsCSRFHeaderFromCookieJar verifies explicit CSRF header creation from stored cookies.
+func TestCallHandlerSetsCSRFHeaderFromCookieJar(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the fixture asks CallHTTP to reuse cookies and copy one cookie value into a CSRF header.
+	jar := NewCookieJar()
+	jar.store([]*http.Cookie{{Name: "csrf_token", Value: "token-1"}})
+	harness := &testHarness{
+		handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			cookie, err := request.Cookie("csrf_token")
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.Equal(t, "token-1", cookie.Value)
+			assert.Equal(t, "token-1", request.Header.Get("X-CSRF-Token"))
+			writer.Header().Set("Content-Type", "application/json")
+			_, err = writer.Write([]byte(`{"ok":true}`))
+			assert.NoError(t, err)
+		}),
+		jar: jar,
+	}
+	callHandler := NewCallHandler[*testHarness]()
+	request, err := callHandler.DecodeRequest(json.RawMessage(`{
+		"method": "POST",
+		"path": "/mutate",
+		"use_cookies": true,
+		"csrf": {"cookie": "csrf_token", "header": "X-CSRF-Token"}
+	}`))
+	require.NoError(t, err)
+
+	// ACT: invoking the request copies the stored cookie value into the configured header.
+	response, err := callHandler.Invoke(t.Context(), harness, request)
+	require.NoError(t, err)
+	normalized, err := callHandler.NormalizeResponse(response)
+	require.NoError(t, err)
+
+	// ASSERT: the request reached the handler and response normalization stayed unchanged.
+	assert.Equal(t, map[string]any{
+		"status": http.StatusOK,
+		"body":   map[string]any{"ok": true},
+	}, normalized)
+}
+
+// TestCallHandlerRejectsCSRFWithoutCookie verifies that fixtures fail when requested CSRF state is unavailable.
+func TestCallHandlerRejectsCSRFWithoutCookie(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the fixture requests a CSRF header from an empty per-case cookie jar.
+	harness := &testHarness{
+		handler: http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			t.Fatal("handler must not be called when CSRF cookie is missing")
+		}),
+		jar: NewCookieJar(),
+	}
+	callHandler := NewCallHandler[*testHarness]()
+	request, err := callHandler.DecodeRequest(json.RawMessage(`{
+		"method": "POST",
+		"path": "/mutate",
+		"csrf": {"cookie": "csrf_token", "header": "X-CSRF-Token"}
+	}`))
+	require.NoError(t, err)
+
+	// ACT: CallHTTP rejects the fixture before invoking the HTTP handler.
+	_, err = callHandler.Invoke(t.Context(), harness, request)
+
+	// ASSERT: the error names the missing cookie so the fixture can be fixed directly.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "csrf_token")
+}
+
+// TestCallHandlerRejectsCSRFHeaderConflict verifies that manual mismatch requests stay explicit.
+func TestCallHandlerRejectsCSRFHeaderConflict(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the fixture sets the CSRF header manually and also asks the helper to derive it.
+	jar := NewCookieJar()
+	jar.store([]*http.Cookie{{Name: "csrf_token", Value: "token-1"}})
+	harness := &testHarness{
+		handler: http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			t.Fatal("handler must not be called when CSRF header is already set")
+		}),
+		jar: jar,
+	}
+	callHandler := NewCallHandler[*testHarness]()
+	request, err := callHandler.DecodeRequest(json.RawMessage(`{
+		"method": "POST",
+		"path": "/mutate",
+		"headers": {"x-csrf-token": "manual-token"},
+		"csrf": {"cookie": "csrf_token", "header": "X-CSRF-Token"}
+	}`))
+	require.NoError(t, err)
+
+	// ACT: CallHTTP refuses to overwrite the manually declared header value.
+	_, err = callHandler.Invoke(t.Context(), harness, request)
+
+	// ASSERT: the error keeps mismatch tests visible in JSONC fixtures.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "X-CSRF-Token")
+}
+
 // TestCallHandlerRejectsCookieReuseWithoutJar verifies that cookie reuse is explicit per harness.
 func TestCallHandlerRejectsCookieReuseWithoutJar(t *testing.T) {
 	t.Parallel()

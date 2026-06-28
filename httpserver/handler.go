@@ -56,8 +56,17 @@ type Request struct {
 	Body           json.RawMessage   `json:"body,omitempty"`
 	RawBody        *string           `json:"raw_body,omitempty"`
 	UseCookies     bool              `json:"use_cookies,omitempty"`
+	CSRF           *CSRFConfig       `json:"csrf,omitempty"`
 	CaptureHeaders []string          `json:"capture_headers,omitempty"`
 	CaptureCookies []string          `json:"capture_cookies,omitempty"`
+}
+
+// CSRFConfig copies one stored cookie value into one request header.
+type CSRFConfig struct {
+	// Cookie names the cookie in the per-case CookieJar whose value becomes the CSRF token.
+	Cookie string `json:"cookie"`
+	// Header names the HTTP header that receives the cookie value.
+	Header string `json:"header"`
 }
 
 // Response is the stable JSON-safe HTTP response shape asserted by fixtures.
@@ -163,6 +172,10 @@ func (handler CallHandler[C]) Invoke(ctx context.Context, harness C, request any
 			return nil, errors.New("use_cookies requires harness method HTTPCookieJar() *httpserver.CookieJar")
 		}
 		jar.attach(httpRequest)
+	}
+	csrfErr := applyCSRFHeader(httpRequest, typedRequest, jar)
+	if csrfErr != nil {
+		return nil, csrfErr
 	}
 
 	return executeHTTPRequest(
@@ -276,6 +289,45 @@ func buildRequestURL(baseURL, path string, query map[string]string) (string, err
 	requestURL.Fragment = ""
 	requestURL.RawFragment = ""
 	return requestURL.String(), nil
+}
+
+// applyCSRFHeader copies a fixture-selected cookie token into a header without overriding manual headers.
+func applyCSRFHeader(httpRequest *http.Request, request *Request, jar *CookieJar) error {
+	if request.CSRF == nil {
+		return nil
+	}
+
+	cookieName := strings.TrimSpace(request.CSRF.Cookie)
+	if cookieName == "" {
+		return errors.New("csrf.cookie is required")
+	}
+	headerName := strings.TrimSpace(request.CSRF.Header)
+	if headerName == "" {
+		return errors.New("csrf.header is required")
+	}
+	if hasManualHeader(request.Headers, headerName) {
+		return fmt.Errorf("csrf header %q is already set in request headers", headerName)
+	}
+	if jar == nil {
+		return errors.New("csrf requires harness method HTTPCookieJar() *httpserver.CookieJar")
+	}
+
+	cookieValue, exists := jar.cookieValue(cookieName)
+	if !exists {
+		return fmt.Errorf("csrf cookie %q is not available in HTTPCookieJar", cookieName)
+	}
+	httpRequest.Header.Set(headerName, cookieValue)
+	return nil
+}
+
+// hasManualHeader detects fixture-declared headers case-insensitively to avoid hiding mismatch cases.
+func hasManualHeader(headers map[string]string, headerName string) bool {
+	for name := range headers {
+		if strings.EqualFold(strings.TrimSpace(name), headerName) {
+			return true
+		}
+	}
+	return false
 }
 
 // executeHTTPRequest invokes the HTTP handler and captures only response data controlled by the fixture contract.
@@ -462,6 +514,18 @@ func (jar *CookieJar) attach(request *http.Request) {
 	for _, name := range cookieNames {
 		request.AddCookie(jar.cookies[name])
 	}
+}
+
+// cookieValue returns a stored cookie value for fixture-controlled header derivation.
+func (jar *CookieJar) cookieValue(name string) (string, bool) {
+	if jar.cookies == nil {
+		return "", false
+	}
+	cookie, exists := jar.cookies[name]
+	if !exists {
+		return "", false
+	}
+	return cookie.Value, true
 }
 
 // store records Set-Cookie values for later explicit use by JSONC requests.

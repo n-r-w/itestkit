@@ -1,0 +1,51 @@
+{
+  "name": "profile email update with csrf cookie helper",
+  "steps": [
+    // Step 1: login stores both session_id and csrf_token cookies in the per-case CookieJar.
+    {
+      "id": "login",
+      "kind": "action",
+      "handler": "CallHTTP",
+      "request": {
+        "method": "POST",
+        "path": "/login",
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "email": "admin@example.test",
+          "password": "correct-password"
+        }
+      }
+    },
+    // Step 2: csrf copies csrf_token from the CookieJar into X-CSRF-Token for this mutation.
+    {
+      "id": "update-email",
+      "kind": "action",
+      "handler": "CallHTTP",
+      "request": {
+        "method": "POST",
+        "path": "/profile/email",
+        "use_cookies": true,
+        "csrf": {
+          "cookie": "csrf_token",
+          "header": "X-CSRF-Token"
+        },
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "email": "operator@example.test"
+        }
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "update-email",
+    "response": {
+      "status": 200,
+      "body": {
+        "user_id": "user-1",
+        "email": "operator@example.test",
+        "authenticated": true
+      }
+    }
+  }
+}

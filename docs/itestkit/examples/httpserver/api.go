@@ -10,13 +10,17 @@ import (
 )
 
 const (
-	contentTypeHeader        = "Content-Type"
-	invalidLoginRequestError = "invalid login request"
-	jsonContentType          = "application/json"
-	methodNotAllowedError    = "method not allowed"
-	sessionCookieName        = "session_id"
-	sessionCookiePath        = "/"
-	sessionID                = "session-1"
+	contentTypeHeader         = "Content-Type"
+	csrfCookieName            = "csrf_token"
+	csrfHeaderName            = "X-CSRF-Token"
+	csrfToken                 = "csrf-1"
+	invalidLoginRequestError  = "invalid login request"
+	invalidUpdateRequestError = "invalid update request"
+	jsonContentType           = "application/json"
+	methodNotAllowedError     = "method not allowed"
+	sessionCookieName         = "session_id"
+	sessionCookiePath         = "/"
+	sessionID                 = "session-1"
 )
 
 // userAccount is the account accepted by the example API.
@@ -36,6 +40,11 @@ type loginRequest struct {
 type loginResponse struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
+}
+
+// updateEmailRequest is the JSON payload accepted by POST /profile/email.
+type updateEmailRequest struct {
+	Email string `json:"email"`
 }
 
 // meResponse is the JSON response returned for the authenticated user.
@@ -78,6 +87,8 @@ func (handler *apiHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		handler.handleLogin(writer, request)
 	case "/me":
 		handler.handleMe(writer, request)
+	case "/profile/email":
+		handler.handleProfileEmail(writer, request)
 	default:
 		writeJSON(writer, http.StatusNotFound, errorResponse{Error: "endpoint not found"})
 	}
@@ -100,14 +111,24 @@ func (handler *apiHandler) handleLogin(writer http.ResponseWriter, request *http
 	}
 
 	handler.sessions[sessionID] = handler.account
-	cookie := new(http.Cookie)
-	cookie.Name = sessionCookieName
-	cookie.Value = sessionID
-	cookie.Path = sessionCookiePath
-	cookie.HttpOnly = true
-	cookie.Secure = true
-	cookie.SameSite = http.SameSiteLaxMode
-	http.SetCookie(writer, cookie)
+	sessionCookie := new(http.Cookie)
+	sessionCookie.Name = sessionCookieName
+	sessionCookie.Value = sessionID
+	sessionCookie.Path = sessionCookiePath
+	sessionCookie.HttpOnly = true
+	sessionCookie.Secure = true
+	sessionCookie.SameSite = http.SameSiteLaxMode
+	http.SetCookie(writer, sessionCookie)
+
+	csrfCookie := new(http.Cookie)
+	csrfCookie.Name = csrfCookieName
+	csrfCookie.Value = csrfToken
+	csrfCookie.Path = sessionCookiePath
+	csrfCookie.HttpOnly = true
+	csrfCookie.Secure = true
+	csrfCookie.SameSite = http.SameSiteLaxMode
+	http.SetCookie(writer, csrfCookie)
+
 	writer.Header().Set("X-Session-Issued", "true")
 	writeJSON(writer, http.StatusOK, loginResponse{UserID: handler.account.UserID, Email: handler.account.Email})
 }
@@ -119,22 +140,71 @@ func (handler *apiHandler) handleMe(writer http.ResponseWriter, request *http.Re
 		return
 	}
 
-	cookie, err := request.Cookie(sessionCookieName)
-	if err != nil {
-		writeJSON(writer, http.StatusUnauthorized, errorResponse{Error: "session cookie is required"})
+	account, _, ok := handler.authenticatedAccount(writer, request)
+	if !ok {
 		return
 	}
-	account, exists := handler.sessions[cookie.Value]
-	if !exists {
-		writeJSON(writer, http.StatusUnauthorized, errorResponse{Error: "session is unknown"})
-		return
-	}
-
 	writeJSON(writer, http.StatusOK, meResponse{
 		UserID:        account.UserID,
 		Email:         account.Email,
 		Authenticated: true,
 	})
+}
+
+// handleProfileEmail updates the authenticated user's email when the CSRF token matches the stored cookie.
+func (handler *apiHandler) handleProfileEmail(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		writeJSON(writer, http.StatusMethodNotAllowed, errorResponse{Error: methodNotAllowedError})
+		return
+	}
+
+	account, sessionCookie, ok := handler.authenticatedAccount(writer, request)
+	if !ok {
+		return
+	}
+	if !validCSRF(request) {
+		writeJSON(writer, http.StatusForbidden, errorResponse{Error: "csrf token is invalid"})
+		return
+	}
+
+	payload, ok := decodeUpdateEmailRequest(writer, request)
+	if !ok {
+		return
+	}
+	account.Email = payload.Email
+	handler.sessions[sessionCookie.Value] = account
+	writeJSON(writer, http.StatusOK, meResponse{
+		UserID:        account.UserID,
+		Email:         account.Email,
+		Authenticated: true,
+	})
+}
+
+// authenticatedAccount returns the account bound to the request session cookie.
+func (handler *apiHandler) authenticatedAccount(
+	writer http.ResponseWriter,
+	request *http.Request,
+) (userAccount, *http.Cookie, bool) {
+	cookie, err := request.Cookie(sessionCookieName)
+	if err != nil {
+		writeJSON(writer, http.StatusUnauthorized, errorResponse{Error: "session cookie is required"})
+		return userAccount{}, nil, false
+	}
+	account, exists := handler.sessions[cookie.Value]
+	if !exists {
+		writeJSON(writer, http.StatusUnauthorized, errorResponse{Error: "session is unknown"})
+		return userAccount{}, nil, false
+	}
+	return account, cookie, true
+}
+
+// validCSRF accepts only requests where the configured header matches the CSRF cookie value.
+func validCSRF(request *http.Request) bool {
+	csrfCookie, err := request.Cookie(csrfCookieName)
+	if err != nil {
+		return false
+	}
+	return request.Header.Get(csrfHeaderName) == csrfCookie.Value
 }
 
 // decodeLoginRequest strictly decodes a login request and writes a 400 response on invalid input.
@@ -150,6 +220,23 @@ func decodeLoginRequest(writer http.ResponseWriter, request *http.Request) (logi
 	if decodeErr != nil {
 		writeJSON(writer, http.StatusBadRequest, errorResponse{Error: invalidLoginRequestError})
 		return loginRequest{}, false
+	}
+	return payload, true
+}
+
+// decodeUpdateEmailRequest strictly decodes an email update request and writes a 400 response on invalid input.
+func decodeUpdateEmailRequest(writer http.ResponseWriter, request *http.Request) (updateEmailRequest, bool) {
+	rawBody, err := io.ReadAll(request.Body)
+	if err != nil {
+		writeJSON(writer, http.StatusBadRequest, errorResponse{Error: invalidUpdateRequestError})
+		return updateEmailRequest{}, false
+	}
+
+	payload := updateEmailRequest{Email: ""}
+	decodeErr := itestkit.DecodeStrictJSON(rawBody, &payload)
+	if decodeErr != nil {
+		writeJSON(writer, http.StatusBadRequest, errorResponse{Error: invalidUpdateRequestError})
+		return updateEmailRequest{}, false
 	}
 	return payload, true
 }

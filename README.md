@@ -247,6 +247,7 @@ Request fields:
 
 - `method`, `path`, `query`, `headers`, `body`, `raw_body`;
 - `use_cookies` — attaches cookies stored from earlier responses in the same case;
+- `csrf.cookie`, `csrf.header` — copies one stored cookie value into one request header and fails if the header is already set manually;
 - `capture_headers`, `capture_cookies` — selects response headers and cookies for assertion.
 
 Cookie reuse requires per-case state:
