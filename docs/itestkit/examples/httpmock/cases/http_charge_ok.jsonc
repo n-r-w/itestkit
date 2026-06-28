@@ -21,6 +21,7 @@
               "X-Request-ID": ["order-1"]
             },
             "headers_mode": "subset",
+            "headers_present": ["X-Timestamp", "X-Signature"],
             "body_subset": {
               "order_id": "order-1",
               "amount": 100

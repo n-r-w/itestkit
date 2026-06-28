@@ -58,6 +58,8 @@ func (client *orderClient) CreateOrder(ctx context.Context, request createOrderR
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("X-Request-ID", request.OrderID)
+	httpRequest.Header.Set("X-Timestamp", fmt.Sprintf("order-%s", request.OrderID))
+	httpRequest.Header.Set("X-Signature", fmt.Sprintf("signed-%s-%d", request.OrderID, request.Amount))
 
 	response, err := client.client.Do(httpRequest)
 	if err != nil {

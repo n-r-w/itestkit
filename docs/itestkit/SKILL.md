@@ -191,7 +191,7 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       2. Create `httpmock.NewServer(t)` in the per-case harness and expose `HTTPMock() *httpmock.Server`.
       3. Use preset handlers: `PlanHTTPCalls`, `AwaitHTTPCalls`, `VerifyHTTPCalls`.
       4. Fixture fields:
-        1) request: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `body`, `body_subset`, `raw_body`, `expected_count`
+        1) request: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `headers_present`, `body`, `body_subset`, `raw_body`, `expected_count`
         2) response: `response.status`, `response.headers`, `response.body`, `response.raw_body`
         3) order: `ordering`
       5. Allowed modes:
@@ -200,7 +200,8 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
         3) `ordering`: `strict`, `any`; empty means `any`
       6. Set only one of `body`, `body_subset`, and `raw_body` per expected request.
       7. Use `body_subset` for JSON subset matching and `raw_body` for exact string matching.
-      8. For success checks, set `assert.response_from_step` to the action or verify step that owns the expected response.
+      8. Use `headers_present` for dynamic headers whose values must not be compared but whose absence must fail matching.
+      9. For success checks, set `assert.response_from_step` to the action or verify step that owns the expected response.
   </httpmock>
 
   <kafka>

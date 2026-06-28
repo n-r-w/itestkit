@@ -276,7 +276,7 @@ Preset handlers:
 
 Plan fields:
 
-- request match: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `body`, `body_subset`, `raw_body`, `expected_count`;
+- request match: `method`, `path`, `query`, `query_mode`, `headers`, `headers_mode`, `headers_present`, `body`, `body_subset`, `raw_body`, `expected_count`;
 - response stub: `response.status`, `response.headers`, `response.body`, `response.raw_body`;
 - ordering: `ordering` with values `strict` and `any`.
 
@@ -284,6 +284,7 @@ Mode values:
 
 - `query_mode`: `exact`, `subset`; empty means `exact`;
 - `headers_mode`: `exact`, `subset`; empty means `exact`;
+- `headers_present` checks that headers exist without comparing their values;
 - `ordering`: `strict`, `any`; empty means `any`.
 
 Body rules:

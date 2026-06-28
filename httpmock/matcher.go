@@ -209,18 +209,40 @@ func matchesCall(call CallExpectation, request ObservedRequest) (matched bool, m
 			return false, reason
 		}
 	}
-	if call.Headers != nil {
-		actualHeaders := canonicalizeHeaderValues(request.Headers)
-		headersMatched, reason := matchValues("headers", string(call.HeadersMode), actualHeaders, call.Headers)
-		if !headersMatched {
-			return false, reason
-		}
+	headersMatched, reason := matchHeaders(call, request)
+	if !headersMatched {
+		return false, reason
 	}
 	bodyMatched, reason := matchBody(call, request)
 	if !bodyMatched {
 		return false, reason
 	}
 
+	return true, ""
+}
+
+// matchHeaders checks value-based and presence-only header expectations against one observed request.
+func matchHeaders(call CallExpectation, request ObservedRequest) (matched bool, mismatchReason string) {
+	if call.Headers == nil && len(call.HeadersPresent) == 0 {
+		return true, ""
+	}
+	actualHeaders := canonicalizeHeaderValues(request.Headers)
+	if call.Headers != nil {
+		headersMatched, reason := matchValues("headers", string(call.HeadersMode), actualHeaders, call.Headers)
+		if !headersMatched {
+			return false, reason
+		}
+	}
+	return matchHeaderPresence(actualHeaders, call.HeadersPresent)
+}
+
+// matchHeaderPresence checks only that required headers exist, without comparing their values.
+func matchHeaderPresence(actual map[string][]string, expected []string) (matched bool, mismatchReason string) {
+	for _, headerName := range expected {
+		if _, exists := actual[headerName]; !exists {
+			return false, fmt.Sprintf("headers_present mismatch: header %q is missing", headerName)
+		}
+	}
 	return true, ""
 }
 

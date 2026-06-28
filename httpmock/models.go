@@ -50,6 +50,7 @@ type CallExpectation struct {
 	QueryMode      QueryMode           `json:"query_mode,omitempty"`
 	Headers        map[string][]string `json:"headers,omitempty"`
 	HeadersMode    HeadersMode         `json:"headers_mode,omitempty"`
+	HeadersPresent []string            `json:"headers_present,omitempty"`
 	Body           json.RawMessage     `json:"body,omitempty"`
 	BodySubset     json.RawMessage     `json:"body_subset,omitempty"`
 	RawBody        *string             `json:"raw_body,omitempty"`

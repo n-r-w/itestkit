@@ -31,6 +31,7 @@ func cloneCall(call CallExpectation) CallExpectation {
 		QueryMode:      call.QueryMode,
 		Headers:        cloneValues(call.Headers),
 		HeadersMode:    call.HeadersMode,
+		HeadersPresent: cloneStrings(call.HeadersPresent),
 		Body:           cloneRawMessage(call.Body),
 		BodySubset:     cloneRawMessage(call.BodySubset),
 		RawBody:        cloneStringPointer(call.RawBody),
@@ -76,6 +77,22 @@ func canonicalizeHeaderValues(headers map[string][]string) map[string][]string {
 	return cloned
 }
 
+// canonicalizeHeaderNames returns trimmed canonical header names for presence-only matching.
+func canonicalizeHeaderNames(headers []string) []string {
+	if headers == nil {
+		return nil
+	}
+	cloned := make([]string, 0, len(headers))
+	for _, header := range headers {
+		trimmedHeader := strings.TrimSpace(header)
+		if trimmedHeader == "" {
+			continue
+		}
+		cloned = append(cloned, http.CanonicalHeaderKey(trimmedHeader))
+	}
+	return cloned
+}
+
 // cloneValues returns a deep copy of a repeated string map.
 func cloneValues(values map[string][]string) map[string][]string {
 	if values == nil {
@@ -94,6 +111,14 @@ func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 		return nil
 	}
 	return append(json.RawMessage(nil), raw...)
+}
+
+// cloneStrings returns a copy of string slice values.
+func cloneStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	return append([]string(nil), values...)
 }
 
 // cloneStringPointer returns a deep copy of a string pointer.

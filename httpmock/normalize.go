@@ -83,6 +83,7 @@ func normalizeCall(call CallExpectation) (CallExpectation, error) {
 
 	normalized.Query = cloneValues(call.Query)
 	normalized.Headers = canonicalizeHeaderValues(call.Headers)
+	normalized.HeadersPresent = canonicalizeHeaderNames(call.HeadersPresent)
 	normalized.Body = cloneRawMessage(call.Body)
 	normalized.BodySubset = cloneRawMessage(call.BodySubset)
 	normalized.RawBody = cloneStringPointer(call.RawBody)

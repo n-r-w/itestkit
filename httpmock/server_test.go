@@ -91,6 +91,86 @@ func TestServer_VerifyReportsMismatch(t *testing.T) {
 	assert.Contains(t, verifyErr.Error(), "method mismatch")
 }
 
+// TestServer_HeadersPresentAcceptsDynamicValues checks required headers without comparing generated values.
+func TestServer_HeadersPresentAcceptsDynamicValues(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the plan checks one fixed header value and two dynamic headers by presence only.
+	plan := decodePlan(t, `{
+		"calls": [
+			{
+				"expected_count": 1,
+				"method": "POST",
+				"path": "/charges",
+				"headers_mode": "subset",
+				"headers": {"X-Service-ID": ["admin"]},
+				"headers_present": ["X-Timestamp", "X-Signature"],
+				"response": {"status": 204}
+			}
+		]
+	}`)
+	server := NewServer(t)
+	require.NoError(t, server.Plan(t.Context(), plan))
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL()+"/charges", http.NoBody)
+	require.NoError(t, err)
+	request.Header.Set("X-Service-ID", "admin")
+	request.Header.Set("x-timestamp", "2026-06-28T12:00:00Z")
+	request.Header.Set("X-Signature", "generated-signature")
+
+	// ACT: the request matches because required dynamic headers are present.
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, response.Body.Close())
+	})
+	result, verifyErr := server.Verify(t.Context())
+
+	// ASSERT: value matching and presence-only matching work together.
+	assert.Equal(t, http.StatusNoContent, response.StatusCode)
+	require.NoError(t, verifyErr)
+	assert.Equal(t, 1, result.MatchedCount)
+}
+
+// TestServer_HeadersPresentReportsMissingHeader checks that presence-only headers are still required.
+func TestServer_HeadersPresentReportsMissingHeader(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the plan requires two dynamic headers but the request will send only one of them.
+	plan := decodePlan(t, `{
+		"calls": [
+			{
+				"expected_count": 1,
+				"method": "POST",
+				"path": "/charges",
+				"headers_present": ["X-Timestamp", "X-Signature"],
+				"response": {"status": 204}
+			}
+		]
+	}`)
+	server := NewServer(t)
+	require.NoError(t, server.Plan(t.Context(), plan))
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL()+"/charges", http.NoBody)
+	require.NoError(t, err)
+	request.Header.Set("X-Timestamp", "2026-06-28T12:00:00Z")
+
+	// ACT: the server records the request, but matcher rejects the missing required header.
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, response.Body.Close())
+	})
+	result, verifyErr := server.Verify(t.Context())
+
+	// ASSERT: the mismatch names the absent header so fixture failures are actionable.
+	assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+	require.Error(t, verifyErr)
+	assert.Equal(t, 0, result.MatchedCount)
+	assert.Contains(t, verifyErr.Error(), "headers_present mismatch")
+	assert.Contains(t, verifyErr.Error(), "X-Signature")
+}
+
 // TestServer_PassThroughDelegatesToWrappedHandler checks that the recorder keeps the request body available for the wrapped handler.
 func TestServer_PassThroughDelegatesToWrappedHandler(t *testing.T) {
 	t.Parallel()
@@ -372,6 +452,18 @@ func rawJSON(t *testing.T, value string) json.RawMessage {
 	return json.RawMessage(value)
 }
 
+// decodePlan decodes JSONC-like test JSON through the same strict path as PlanHTTPCalls.
+func decodePlan(t *testing.T, value string) Plan {
+	t.Helper()
+
+	handler := PlanHTTPCallsHandler[testHarness]{}
+	decoded, err := handler.DecodeRequest(rawJSON(t, value))
+	require.NoError(t, err)
+	plan, ok := decoded.(Plan)
+	require.True(t, ok)
+	return plan
+}
+
 // stringPtr returns a pointer to value.
 func stringPtr(value string) *string {
 	return &value
@@ -424,6 +516,7 @@ func testCall(method, path string, response Response) CallExpectation {
 		QueryMode:      "",
 		Headers:        nil,
 		HeadersMode:    "",
+		HeadersPresent: nil,
 		Body:           nil,
 		BodySubset:     nil,
 		RawBody:        nil,
