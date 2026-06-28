@@ -11,3 +11,4 @@ See `README.md` for more details.
 1. Run `task test`, `task lint` before finalizing.
 2. Tests in `docs/itestkit/examples/` will fail. It OK due to special negative tests-cases in `docs/itestkit/examples/grpc`.
 3. Run `task fmt` to fix linter formatting issues.
+4. Update LLM rules `docs/itestkit/SKILL.md` and examples in `docs/itestkit/examples/` after code changes.

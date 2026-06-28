@@ -1,0 +1,45 @@
+{
+  "name": "login sets session cookie",
+  "steps": [
+    // Step 1: call the login endpoint and capture selected transport fields.
+    {
+      "id": "login",
+      "kind": "action",
+      "handler": "CallHTTP",
+      "request": {
+        "method": "POST",
+        "path": "/login",
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "email": "admin@example.test",
+          "password": "correct-password"
+        },
+        "capture_headers": ["X-Session-Issued"],
+        "capture_cookies": ["session_id"]
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "login",
+    "response": {
+      "status": 200,
+      "headers": {
+        "X-Session-Issued": ["true"]
+      },
+      "cookies": {
+        "session_id": {
+          "value": "session-1",
+          "path": "/",
+          "http_only": true,
+          "secure": true,
+          "same_site": "Lax"
+        }
+      },
+      "body": {
+        "user_id": "user-1",
+        "email": "admin@example.test"
+      }
+    }
+  }
+}
