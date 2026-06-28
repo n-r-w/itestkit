@@ -40,11 +40,12 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
             - `assert.response_from_step` when set
             - otherwise output of the last `action` step
           - `assert.response_mode` values:
-            - absent or `exact`: compare full normalized expected and actual responses
+            - absent or `exact`: compare full normalized expected and actual responses. Use `"<itestkit_present>"` as an object field value to assert that the field exists with any value. The marker must occupy the whole string value and is not valid at the root or as an array element. A present field with `null` passes.
             - `partial`: compare only fields present in `assert.response`
           - In `partial` mode:
             * object fields are recursive subsets, arrays require exact length and order, and scalar values use strict equality.
-            * use `"<itestkit_absent>"` as an object field value to assert that the field is absent from the normalized actual response. The marker must occupy the whole string value and is not valid at the root or as an array element. A present field, including `null`, fails.
+            * use `"<itestkit_present>"` with the same placement rules as in `exact`.
+            * use `"<itestkit_absent>"` as an object field value to assert that the field is absent from the normalized actual response. The absence marker must occupy the whole string value and is not valid at the root or as an array element. A present field, including `null`, fails.
             * expected response stays as raw JSON after source preprocessing and is not decoded through `DecodeExpectedResponse`.
           - Actual response is normalized through `NormalizeResponse`.
       2) `code != Success()`:

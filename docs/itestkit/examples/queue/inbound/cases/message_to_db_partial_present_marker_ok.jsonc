@@ -1,0 +1,53 @@
+{
+    "name": "message pipeline checks partial response with present markers",
+    "description": "demonstrates <itestkit_present> in partial response mode for selected fields",
+    "steps": [
+        {
+            "id": "init-env",
+            "kind": "prepare",
+            "handler": "InitEnvironment",
+            "request": {}
+        },
+        {
+            "id": "publish-order",
+            "kind": "publish",
+            "handler": "PublishOrder",
+            "request": {
+                "order_id": "order-present-partial",
+                "amount": 7300
+            }
+        },
+        {
+            "id": "await-consumer",
+            "kind": "await",
+            "handler": "AwaitConsumption",
+            "request": {
+                "order_id": "order-present-partial"
+            },
+            "retry": {
+                "timeout_ms": 500,
+                "interval_ms": 10,
+                "max_attempts": 5
+            }
+        },
+        {
+            "id": "verify-db",
+            "kind": "verify",
+            "handler": "VerifyOrder",
+            "request": {
+                "order_id": "order-present-partial"
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "verify-db",
+        "response_mode": "partial",
+        "response": {
+            "order_id": "order-present-partial",
+            // Partial mode ignores fields not listed here but still checks selected field presence.
+            "amount": "<itestkit_present>",
+            "stored": "<itestkit_present>"
+        }
+    }
+}

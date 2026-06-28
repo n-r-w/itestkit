@@ -191,8 +191,8 @@ For successful cases, `assert.response` is checked against a normalized step res
 
 `response_mode` values:
 
-- `exact` — the full normalized response must match;
-- `partial` — object fields from `assert.response` must match, and extra object fields in the actual response are allowed. Use `"<itestkit_absent>"` as an object field value to assert that the field is absent from the normalized actual response. The marker must occupy the whole string value and is not valid at the root or as an array element. A present field, including `null`, fails.
+- `exact` — the full normalized response must match. Use `"<itestkit_present>"` as an object field value to assert that the field exists with any value. The marker must occupy the whole string value and is not valid at the root or as an array element. A present field with `null` passes.
+- `partial` — object fields from `assert.response` must match, and extra object fields in the actual response are allowed. Use `"<itestkit_present>"` with the same rules as in `exact`. Use `"<itestkit_absent>"` as an object field value to assert that the field is absent from the normalized actual response. The absence marker must occupy the whole string value and is not valid at the root or as an array element. A present field, including `null`, fails.
 
 For expected errors, use `message_contains` when the error message is part of the contract.
 

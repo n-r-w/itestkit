@@ -428,6 +428,14 @@ func mapSuccessAssertResponse[C any, S comparable](
 		return expectedResponse, nil
 	}
 
+	rawExpectedResponse, rawDecodeErr := decodeRawExpectedResponse(rawResponse)
+	if rawDecodeErr != nil {
+		return nil, fmt.Errorf("%s: decode raw assert.response: %w", casePath, rawDecodeErr)
+	}
+	if responseTemplateContainsPresentMarker(rawExpectedResponse) {
+		return rawExpectedResponse, nil
+	}
+
 	expectedResponse, decodeErr := targetStep.Handler.DecodeExpectedResponse(rawResponse)
 	if decodeErr != nil {
 		return nil, fmt.Errorf("%s: decode assert.response: %w", casePath, decodeErr)
