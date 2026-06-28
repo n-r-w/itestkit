@@ -86,6 +86,43 @@ func TestCallHandlerInvokesHTTPHandler(t *testing.T) {
 	}, normalized)
 }
 
+// TestCallHandlerCapturesAbsentHeaderAsEmptyList verifies that requested missing headers stay assertable as arrays.
+func TestCallHandlerCapturesAbsentHeaderAsEmptyList(t *testing.T) {
+	t.Parallel()
+
+	// ARRANGE: the handler returns JSON without the requested Set-Cookie header.
+	harness := &testHarness{
+		handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			_, err := writer.Write([]byte(`{"ok":true}`))
+			assert.NoError(t, err)
+		}),
+		jar: nil,
+	}
+	callHandler := NewCallHandler[*testHarness]()
+	request, err := callHandler.DecodeRequest(json.RawMessage(`{
+		"method": "GET",
+		"path": "/without-cookie",
+		"capture_headers": ["Set-Cookie"]
+	}`))
+	require.NoError(t, err)
+
+	// ACT: response normalization includes the requested header even though it is absent.
+	response, err := callHandler.Invoke(t.Context(), harness, request)
+	require.NoError(t, err)
+	normalized, err := callHandler.NormalizeResponse(response)
+	require.NoError(t, err)
+
+	// ASSERT: exact comparisons can distinguish an explicitly captured absent header from an omitted header.
+	assert.Equal(t, map[string]any{
+		"status": http.StatusOK,
+		"headers": map[string][]string{
+			"Set-Cookie": {},
+		},
+		"body": map[string]any{"ok": true},
+	}, normalized)
+}
+
 // TestCallHandlerKeepsCookiesInCaseJar verifies explicit cookie reuse between case steps.
 func TestCallHandlerKeepsCookiesInCaseJar(t *testing.T) {
 	t.Parallel()

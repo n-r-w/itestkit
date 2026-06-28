@@ -413,7 +413,11 @@ func captureHTTPHeaders(responseRecorder *httptest.ResponseRecorder, captureHead
 		if trimmedName == "" {
 			continue
 		}
-		headers[trimmedName] = responseRecorder.Header().Values(trimmedName)
+		values := responseRecorder.Header().Values(trimmedName)
+		if values == nil {
+			values = []string{}
+		}
+		headers[trimmedName] = values
 	}
 
 	return headers

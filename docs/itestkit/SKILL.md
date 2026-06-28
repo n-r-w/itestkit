@@ -180,8 +180,9 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       7. Use `csrf` only for valid CSRF flows where a stored cookie must become a request header. `CallHTTP` fails if the cookie is missing or the same header is already set manually.
       8. Keep missing and mismatch CSRF cases explicit with `headers`, `use_cookies`, or neither. Do not use `csrf` for those negative cases.
       9. JSON response bodies are decoded to JSON-safe values. Non-JSON response bodies are normalized as trimmed strings.
-      10. Use `httpserver.WithBaseURL(...)` when the handler uses request host.
-      11. For success checks, set `assert.response_from_step` to the `CallHTTP` step when it is not the last action step.
+      10. Requested absent headers in `capture_headers` are normalized as empty arrays, not `null`.
+      11. Use `httpserver.WithBaseURL(...)` when the handler uses request host.
+      12. For success checks, set `assert.response_from_step` to the `CallHTTP` step when it is not the last action step.
   </httpserver>
 
   <httpmock>

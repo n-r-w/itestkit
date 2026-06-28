@@ -24,7 +24,8 @@
       "request": {
         "method": "GET",
         "path": "/me",
-        "use_cookies": true
+        "use_cookies": true,
+        "capture_headers": ["Set-Cookie"]
       }
     }
   ],
@@ -33,6 +34,9 @@
     "response_from_step": "me",
     "response": {
       "status": 200,
+      "headers": {
+        "Set-Cookie": []
+      },
       "body": {
         "user_id": "user-1",
         "email": "admin@example.test",
