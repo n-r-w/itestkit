@@ -165,6 +165,22 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       6. Set explicit `assert.response_from_step` for deterministic assert target.
   </ext_api>
 
+  <httpserver>
+    How to test inbound HTTP API handlers:
+      1. Use `github.com/n-r-w/itestkit/httpserver` when JSONC cases must call an in-process `net/http.Handler`.
+      2. Create a per-case harness that exposes `HTTPHandler() http.Handler`.
+      3. Use `httpserver.NewRegistry(...)` for the preset `CallHTTP` handler, or `httpserver.NewCallHandler(...)` for manual registration.
+      4. Fixture request fields:
+        1) `method`, `path`, `query`, `headers`, `body`, `raw_body`
+        2) `use_cookies`
+        3) `capture_headers`, `capture_cookies`
+      5. Set only one of `body` and `raw_body`.
+      6. If cases need cookie reuse across steps, create `httpserver.NewCookieJar()` per case and expose `HTTPCookieJar() *httpserver.CookieJar` from the harness. Do not share one jar between cases.
+      7. JSON response bodies are decoded to JSON-safe values. Non-JSON response bodies are normalized as trimmed strings.
+      8. Use `httpserver.WithBaseURL(...)` when the handler uses request host.
+      9. For success checks, set `assert.response_from_step` to the `CallHTTP` step when it is not the last action step.
+  </httpserver>
+
   <httpmock>
     How to test outbound HTTP calls:
       1. Use `github.com/n-r-w/itestkit/httpmock` when the SUT accepts an outbound HTTP base URL.
@@ -251,6 +267,7 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       9. [Synchronous external gRPC API call](examples/extapigrpcsync)
       10. [Complex project with grpc api, external api call, database and itests](examples/real)
       11. [Adapter-style external gRPC call (target + dial options)](examples/extapigrpcadapter)
+      12. [Inbound HTTP handler](examples/httpserver)
   </examples>
 
 </itestkit_usage>

@@ -1,0 +1,27 @@
+{
+  "name": "login invalid json returns bad request",
+  "steps": [
+    // Step 1: raw_body sends malformed JSON that cannot be expressed as the body object.
+    {
+      "id": "login",
+      "kind": "action",
+      "handler": "CallHTTP",
+      "request": {
+        "method": "POST",
+        "path": "/login",
+        "headers": { "Content-Type": "application/json" },
+        "raw_body": "{bad-json"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "login",
+    "response": {
+      "status": 400,
+      "body": {
+        "error": "invalid login request"
+      }
+    }
+  }
+}

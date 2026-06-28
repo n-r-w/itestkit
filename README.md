@@ -230,9 +230,38 @@ Additional packages:
 - `github.com/n-r-w/itestkit/grpc` — gRPC handler helpers and protobuf JSON normalization;
 - `github.com/n-r-w/itestkit/grpc/bufconn` — in-memory gRPC server/client helpers;
 - `github.com/n-r-w/itestkit/httpmock` — JSONC-driven outbound HTTP mock server;
+- `github.com/n-r-w/itestkit/httpserver` — JSONC-driven calls to an in-process `net/http.Handler`;
 - `github.com/n-r-w/itestkit/testcalendar` — deterministic date and timestamp macros for JSONC cases;
 - `github.com/n-r-w/itestkit/queue/kafkaproducer` — Kafka producer test harness;
 - `github.com/n-r-w/itestkit/queue/itest` — ready-made queue step registry.
+
+## HTTP server helper
+
+Use `httpserver.NewRegistry` or `httpserver.NewCallHandler` when JSONC cases need to call an in-process `net/http.Handler`. The case harness must expose `HTTPHandler() http.Handler`.
+
+Preset handler:
+
+- `CallHTTP` — builds an HTTP request from JSONC, calls the handler, and normalizes the response.
+
+Request fields:
+
+- `method`, `path`, `query`, `headers`, `body`, `raw_body`;
+- `use_cookies` — attaches cookies stored from earlier responses in the same case;
+- `capture_headers`, `capture_cookies` — selects response headers and cookies for assertion.
+
+Cookie reuse requires per-case state:
+
+```go
+type harness struct {
+    handler http.Handler
+    cookies *httpserver.CookieJar
+}
+
+func (h *harness) HTTPHandler() http.Handler { return h.handler }
+func (h *harness) HTTPCookieJar() *httpserver.CookieJar { return h.cookies }
+```
+
+See `docs/itestkit/examples/httpserver` for a complete JSONC example.
 
 ## HTTP mock helper
 
@@ -271,6 +300,7 @@ See `docs/itestkit/examples/httpmock` for a complete JSONC example.
 - `docs/itestkit/examples/custom` — minimal custom integration;
 - `docs/itestkit/examples/grpc` — gRPC client integration;
 - `docs/itestkit/examples/extapigrpcadapter` — adapter-style gRPC target and dial options;
+- `docs/itestkit/examples/httpserver` — inbound HTTP handler flow;
 - `docs/itestkit/examples/httpmock` — outbound HTTP mock flow;
 - `docs/itestkit/examples/queue/inbound` — inbound queue flow;
 - `docs/itestkit/examples/queue/outbound` — outbound Kafka flow;
