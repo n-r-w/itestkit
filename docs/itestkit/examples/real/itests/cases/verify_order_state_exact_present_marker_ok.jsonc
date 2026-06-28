@@ -1,0 +1,79 @@
+// Present marker in exact mode: the scenario still checks the full persisted order state,
+// but allows selected fields to contain any generated or environment-dependent value.
+{
+  "name": "verify order state exact response with present markers",
+  "steps": [
+    // Step 1 (prepare): seed order in in-memory DB.
+    {
+      "id": "seed-orders",
+      "kind": "prepare",
+      "handler": "SeedOrders",
+      "request": {
+        "orders": [
+          {
+            "order_id": "order-present-exact-real",
+            "amount": 2300
+          }
+        ]
+      }
+    },
+    // Step 2 (prepare): plan expected outbound calls and external API responses.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCalls",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "risk:order-present-exact-real",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "reserve:order-present-exact-real",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          }
+        ]
+      }
+    },
+    // Step 3 (action): call our service API so it updates order state.
+    {
+      "id": "call-api",
+      "kind": "action",
+      "handler": "CallOrderAPI",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}"
+      }
+    },
+    // Step 4 (verify): read persisted state for final assertion.
+    {
+      "id": "verify-order-state",
+      "kind": "verify",
+      "handler": "VerifyOrderState",
+      "request": {
+        "order_id": "{{steps.seed-orders.response.orders.0.order_id}}",
+        "expected_status": "SERVING",
+        "expected_external_services": [
+          "{{steps.plan-external.response.calls.0.expected_service}}",
+          "{{steps.plan-external.response.calls.1.expected_service}}"
+        ]
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "verify-order-state",
+    "response_mode": "exact",
+    "response": {
+      "order_id": "order-present-exact-real",
+      // The numeric amount field must exist, but this assertion does not care about its value.
+      "amount": "<itestkit_present>",
+      "status": "SERVING",
+      // The external services slice must exist, but this assertion does not care about its contents.
+      "external_services": "<itestkit_present>"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+// Nested present marker in exact mode: the marker is inside an object that is inside an array.
+{
+  "name": "plan external exact response with nested present marker",
+  "steps": [
+    // Step 1 (prepare): plan expected outbound calls and keep the plan response for assertion.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCalls",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "risk:order-nested-exact-real",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "reserve:order-nested-exact-real",
+            "stub_response": {
+              "status": "NOT_SERVING"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "plan-external",
+    "response_mode": "exact",
+    "response": {
+      "planned": true,
+      "calls": [
+        {
+          "expected_service": "risk:order-nested-exact-real",
+          "stub_response": {
+            // The marker is nested under calls[0].stub_response.status.
+            "status": "<itestkit_present>"
+          }
+        },
+        {
+          "expected_service": "reserve:order-nested-exact-real",
+          "stub_response": {
+            "status": "NOT_SERVING"
+          }
+        }
+      ]
+    }
+  }
+}

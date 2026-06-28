@@ -1,0 +1,54 @@
+{
+    "name": "message pipeline checks exact response with present markers",
+    "description": "demonstrates <itestkit_present> in exact response mode for non-string fields",
+    "steps": [
+        {
+            "id": "init-env",
+            "kind": "prepare",
+            "handler": "InitEnvironment",
+            "request": {}
+        },
+        {
+            "id": "publish-order",
+            "kind": "publish",
+            "handler": "PublishOrder",
+            "request": {
+                "order_id": "order-present-exact",
+                "amount": 4200
+            }
+        },
+        {
+            "id": "await-consumer",
+            "kind": "await",
+            "handler": "AwaitConsumption",
+            "request": {
+                "order_id": "order-present-exact"
+            },
+            "retry": {
+                "timeout_ms": 500,
+                "interval_ms": 10,
+                "max_attempts": 5
+            }
+        },
+        {
+            "id": "verify-db",
+            "kind": "verify",
+            "handler": "VerifyOrder",
+            "request": {
+                "order_id": "order-present-exact"
+            }
+        }
+    ],
+    "assert": {
+        "code": "OK",
+        "response_from_step": "verify-db",
+        "response_mode": "exact",
+        "response": {
+            "order_id": "order-present-exact",
+            // The present marker checks that the numeric amount field exists with any value.
+            "amount": "<itestkit_present>",
+            // The present marker checks that the boolean stored field exists with any value.
+            "stored": "<itestkit_present>"
+        }
+    }
+}

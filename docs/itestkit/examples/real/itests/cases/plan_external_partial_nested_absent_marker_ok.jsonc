@@ -1,0 +1,52 @@
+// Nested absence marker in partial mode: the marker is inside an object that is inside an array.
+{
+  "name": "plan external partial response with nested absent marker",
+  "steps": [
+    // Step 1 (prepare): plan expected outbound calls and keep the plan response for assertion.
+    {
+      "id": "plan-external",
+      "kind": "prepare",
+      "handler": "PlanExternalCalls",
+      "request": {
+        "calls": [
+          {
+            "expected_service": "risk:order-nested-absent-real",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          },
+          {
+            "expected_service": "reserve:order-nested-absent-real",
+            "stub_response": {
+              "status": "SERVING"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "plan-external",
+    "response_mode": "partial",
+    "response": {
+      "calls": [
+        {
+          "expected_service": "risk:order-nested-absent-real",
+          "stub_response": {
+            "status": "SERVING",
+            // The absence marker is nested under calls[0].stub_response.debug.
+            "debug": "<itestkit_absent>"
+          }
+        },
+        {
+          "expected_service": "reserve:order-nested-absent-real",
+          "stub_response": {
+            "status": "SERVING",
+            "debug": "<itestkit_absent>"
+          }
+        }
+      ]
+    }
+  }
+}

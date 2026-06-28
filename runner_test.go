@@ -30,6 +30,13 @@ type runnerProtoStructValue struct {
 	hidden   string
 }
 
+// runnerPresentMarkerStructResponse models a normalized response that keeps typed fields with JSON names.
+type runnerPresentMarkerStructResponse struct {
+	OrderID string `json:"order_id"`
+	Amount  int    `json:"amount"`
+	Stored  bool   `json:"stored"`
+}
+
 // TestRunCases_OrderAndDefaultActionAssertTarget checks the order of steps and the default assert target (last action).
 func TestRunCases_OrderAndDefaultActionAssertTarget(t *testing.T) {
 	t.Parallel()
@@ -645,6 +652,196 @@ func TestRunCases_PartialResponseAbsentMarkerRequiresObjectField(t *testing.T) {
 	err = runPartialResponseCase(t, []any{"present value"}, []any{partialResponseAbsentMarker})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$[0]: absence marker can be used only as an object field value")
+}
+
+// TestRunCases_PartialResponsePresentMarkerAllowsAnyFieldValue checks that the presence marker ignores the present value type.
+func TestRunCases_PartialResponsePresentMarkerAllowsAnyFieldValue(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"id":      "c5033d68-8142-42e6-89a7-410066d113cd",
+		"version": json.Number("12"),
+		"active":  true,
+		"meta": map[string]any{
+			"source": "api",
+		},
+		"deleted_at": nil,
+	}
+	expected := map[string]any{
+		"id":         responsePresentMarker,
+		"version":    responsePresentMarker,
+		"active":     responsePresentMarker,
+		"meta":       responsePresentMarker,
+		"deleted_at": responsePresentMarker,
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponsePresentMarkerRejectsMissingField checks that the presence marker requires object key existence.
+func TestRunCases_PartialResponsePresentMarkerRejectsMissingField(t *testing.T) {
+	t.Parallel()
+
+	err := runPartialResponseCase(t, map[string]any{"status": "SERVING"}, map[string]any{
+		"status": "SERVING",
+		"debug":  responsePresentMarker,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.debug: field must be present")
+}
+
+// TestRunCases_PartialResponsePresentMarkerRequiresObjectField checks that the presence marker is not valid at root or array positions.
+func TestRunCases_PartialResponsePresentMarkerRequiresObjectField(t *testing.T) {
+	t.Parallel()
+
+	err := runPartialResponseCase(t, "present value", responsePresentMarker)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$: presence marker can be used only as an object field value")
+
+	err = runPartialResponseCase(t, []any{"present value"}, []any{responsePresentMarker})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$[0]: presence marker can be used only as an object field value")
+}
+
+// TestRunCases_ExactResponsePresentMarkerAllowsAnyFieldValue checks exact-mode presence for values that cannot decode as marker strings.
+func TestRunCases_ExactResponsePresentMarkerAllowsAnyFieldValue(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"id":      "c5033d68-8142-42e6-89a7-410066d113cd",
+		"version": 12.0,
+		"active":  true,
+		"meta": map[string]any{
+			"source": "api",
+		},
+		"deleted_at": nil,
+		"status":     "created",
+	}
+	expected := map[string]any{
+		"id":         responsePresentMarker,
+		"version":    responsePresentMarker,
+		"active":     responsePresentMarker,
+		"meta":       responsePresentMarker,
+		"deleted_at": responsePresentMarker,
+		"status":     "created",
+	}
+
+	err := runExactPresentMarkerCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponsePresentMarkerAllowsStructResponseFields checks marker matching against struct JSON fields.
+func TestRunCases_PartialResponsePresentMarkerAllowsStructResponseFields(t *testing.T) {
+	t.Parallel()
+
+	actual := &runnerPresentMarkerStructResponse{
+		OrderID: "order-present-partial-struct",
+		Amount:  4200,
+		Stored:  true,
+	}
+	expected := map[string]any{
+		"order_id": "order-present-partial-struct",
+		"amount":   responsePresentMarker,
+		"stored":   responsePresentMarker,
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_ExactResponsePresentMarkerAllowsStructResponseFields checks marker matching against struct JSON fields.
+func TestRunCases_ExactResponsePresentMarkerAllowsStructResponseFields(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	handler := NewMockHandler[any](ctrl)
+	statusCodec := newMockStatusCodec(t, ctrl)
+	factory := NewMockHarnessFactory[any](ctrl)
+	factory.EXPECT().New(gomock.Any()).Times(1).Return(nil)
+	inspector := NewMockErrorInspector[testStatus](ctrl)
+
+	actual := &runnerPresentMarkerStructResponse{
+		OrderID: "order-present-exact-struct",
+		Amount:  4200,
+		Stored:  true,
+	}
+	handler.EXPECT().Invoke(gomock.Any(), gomock.Any(), gomock.Any()).Times(1).Return("raw-actual-response", nil)
+	handler.EXPECT().DecodeExpectedResponse(gomock.Any()).Times(1).DoAndReturn(
+		func(raw json.RawMessage) (any, error) {
+			var response runnerPresentMarkerStructResponse
+			if err := json.Unmarshal(raw, &response); err != nil {
+				return nil, err
+			}
+			return &response, nil
+		},
+	)
+	handler.EXPECT().NormalizeResponse(gomock.Any()).AnyTimes().DoAndReturn(
+		func(response any) (any, error) {
+			rawResponse, ok := response.(string)
+			if ok && rawResponse == "raw-actual-response" {
+				return actual, nil
+			}
+			return response, nil
+		},
+	)
+
+	testCase := Case[any, testStatus]{
+		Name:       "exact-present-marker-struct-case",
+		SourcePath: "cases/exact-present-marker-struct-case.jsonc",
+		Steps: []Step[any]{
+			newRunnerStep("action-1", StepKindAction, "Handler", handler, "act", nil),
+		},
+		Assert: newRunnerAssert(testStatusOK, "", map[string]any{
+			"order_id": "order-present-exact-struct",
+			"amount":   responsePresentMarker,
+			"stored":   responsePresentMarker,
+		}, ""),
+	}
+
+	err := runCase(t.Context(), t, testCase, factory, inspector, statusCodec, defaultRunCasesConfig())
+	require.NoError(t, err)
+}
+
+// TestRunCases_ExactResponsePresentMarkerRejectsMissingField checks exact-mode marker errors before expected response decoding.
+func TestRunCases_ExactResponsePresentMarkerRejectsMissingField(t *testing.T) {
+	t.Parallel()
+
+	err := runExactPresentMarkerCase(t, map[string]any{"status": "created"}, map[string]any{
+		"id":     responsePresentMarker,
+		"status": "created",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.id: field must be present")
+}
+
+// TestRunCases_ExactResponsePresentMarkerRejectsExtraField checks that exact mode keeps full response comparison with markers.
+func TestRunCases_ExactResponsePresentMarkerRejectsExtraField(t *testing.T) {
+	t.Parallel()
+
+	err := runExactPresentMarkerCase(t, map[string]any{
+		"id":     "c5033d68-8142-42e6-89a7-410066d113cd",
+		"status": "created",
+		"extra":  true,
+	}, map[string]any{
+		"id":     responsePresentMarker,
+		"status": "created",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "response mismatch")
+}
+
+// TestRunCases_ExactResponsePresentMarkerRequiresObjectField checks exact-mode marker placement rules.
+func TestRunCases_ExactResponsePresentMarkerRequiresObjectField(t *testing.T) {
+	t.Parallel()
+
+	err := runExactPresentMarkerCase(t, "present value", responsePresentMarker)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$: presence marker can be used only as an object field value")
+
+	err = runExactPresentMarkerCase(t, []any{"present value"}, []any{responsePresentMarker})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$[0]: presence marker can be used only as an object field value")
 }
 
 // TestRunCases_PartialResponseKeepsStrictArrayLength checks that the mode is `partial`
@@ -1460,6 +1657,40 @@ func newRunnerPolicyTestCase(name string) Case[any, testStatus] {
 		},
 		Assert: newRunnerAssert(testStatusOK, "", nil, ""),
 	}
+}
+
+// runExactPresentMarkerCase runs an exact-mode case where expected response may contain presence markers.
+func runExactPresentMarkerCase(t *testing.T, actualNormalized, expectedTemplate any) error {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	handler := newMockHandler(t, ctrl)
+	statusCodec := newMockStatusCodec(t, ctrl)
+	factory := NewMockHarnessFactory[any](ctrl)
+	factory.EXPECT().New(gomock.Any()).Times(1).Return(nil)
+	inspector := NewMockErrorInspector[testStatus](ctrl)
+
+	handler.EXPECT().Invoke(gomock.Any(), gomock.Any(), gomock.Any()).Times(1).Return("raw-actual-response", nil)
+	handler.EXPECT().NormalizeResponse(gomock.Any()).AnyTimes().DoAndReturn(
+		func(response any) (any, error) {
+			rawResponse, ok := response.(string)
+			if ok && rawResponse == "raw-actual-response" {
+				return actualNormalized, nil
+			}
+			return response, nil
+		},
+	)
+
+	testCase := Case[any, testStatus]{
+		Name:       "exact-present-marker-case",
+		SourcePath: "cases/exact-present-marker-case.jsonc",
+		Steps: []Step[any]{
+			newRunnerStep("action-1", StepKindAction, "Handler", handler, "act", nil),
+		},
+		Assert: newRunnerAssert(testStatusOK, "", expectedTemplate, ""),
+	}
+
+	return runCase(t.Context(), t, testCase, factory, inspector, statusCodec, defaultRunCasesConfig())
 }
 
 // runResponseMismatchCase runs a minimal case with mismatched normalized responses.

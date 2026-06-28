@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,8 @@ const (
 	diffActualFileName = "actual"
 	// partialResponseAbsentMarker marks a field that must not exist in the normalized response.
 	partialResponseAbsentMarker = "<itestkit_absent>"
+	// responsePresentMarker marks a field that must exist in the normalized response with any value.
+	responsePresentMarker = "<itestkit_present>"
 )
 
 // RunCasesOption configures the behavior of RunCases.
@@ -697,6 +700,14 @@ func assertSuccessfulResponseMatch[C any, S comparable](
 ) error {
 	switch testCase.Assert.ResponseMode {
 	case "", ResponseModeExact:
+		if responseTemplateContainsPresentMarker(testCase.Assert.Response) {
+			return assertExactResponseWithPresentMarkers(
+				testCase.SourcePath,
+				targetStep.Handler,
+				testCase.Assert.Response,
+				actualNormalized,
+			)
+		}
 		expectedNormalized, normalizeErr := targetStep.Handler.NormalizeResponse(testCase.Assert.Response)
 		if normalizeErr != nil {
 			return fmt.Errorf("%q: normalize expected response: %w", testCase.SourcePath, normalizeErr)
@@ -741,9 +752,46 @@ func assertNormalizedResponseMatch(sourcePath string, expectedNormalized, actual
 	return nil
 }
 
+// assertExactResponseWithPresentMarkers turns presence markers into actual values before exact comparison.
+func assertExactResponseWithPresentMarkers[C any](
+	sourcePath string,
+	handler Handler[C],
+	expectedTemplate any,
+	actualNormalized any,
+) error {
+	actualTemplateView, viewErr := responseTemplateActualView(actualNormalized)
+	if viewErr != nil {
+		return fmt.Errorf("%q: prepare actual response view for presence markers: %w", sourcePath, viewErr)
+	}
+	materializedExpected, materializeErr := materializePresentMarkers("$", expectedTemplate, actualTemplateView)
+	if materializeErr != nil {
+		return fmt.Errorf("%q: response comparison failed: %w", sourcePath, materializeErr)
+	}
+
+	rawExpected, marshalErr := json.Marshal(materializedExpected)
+	if marshalErr != nil {
+		return fmt.Errorf("%q: encode expected response with presence markers: %w", sourcePath, marshalErr)
+	}
+
+	expectedResponse, decodeErr := handler.DecodeExpectedResponse(rawExpected)
+	if decodeErr != nil {
+		return fmt.Errorf("%q: decode expected response with presence markers: %w", sourcePath, decodeErr)
+	}
+	expectedNormalized, normalizeErr := handler.NormalizeResponse(expectedResponse)
+	if normalizeErr != nil {
+		return fmt.Errorf("%q: normalize expected response with presence markers: %w", sourcePath, normalizeErr)
+	}
+
+	return assertNormalizedResponseMatch(sourcePath, expectedNormalized, actualNormalized)
+}
+
 // assertPartialResponseMatch checks for the presence of expected fields in the normalized response.
 func assertPartialResponseMatch(sourcePath string, expectedPartial, actualNormalized any) error {
-	if err := comparePartialResponseValue("$", expectedPartial, actualNormalized); err != nil {
+	actualTemplateView, viewErr := responseTemplateActualView(actualNormalized)
+	if viewErr != nil {
+		return fmt.Errorf("%q: prepare actual response view for partial comparison: %w", sourcePath, viewErr)
+	}
+	if err := comparePartialResponseValue("$", expectedPartial, actualTemplateView); err != nil {
 		return fmt.Errorf("%q: response partial mismatch: %w", sourcePath, err)
 	}
 	return nil
@@ -753,6 +801,9 @@ func assertPartialResponseMatch(sourcePath string, expectedPartial, actualNormal
 func comparePartialResponseValue(path string, expected, actual any) error {
 	if isPartialResponseAbsentMarker(expected) {
 		return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
+	}
+	if isResponsePresentMarker(expected) {
+		return fmt.Errorf("%s: presence marker can be used only as an object field value", path)
 	}
 
 	switch expectedValue := expected.(type) {
@@ -780,6 +831,12 @@ func comparePartialResponseObject(path string, expected map[string]any, actual a
 		if isPartialResponseAbsentMarker(nestedExpected) {
 			if exists {
 				return fmt.Errorf("%s: field must be absent: found %v (%T)", nestedPath, nestedActual, nestedActual)
+			}
+			continue
+		}
+		if isResponsePresentMarker(nestedExpected) {
+			if !exists {
+				return fmt.Errorf("%s: field must be present", nestedPath)
 			}
 			continue
 		}
@@ -820,6 +877,125 @@ func comparePartialResponseArray(path string, expected []any, actual any) error 
 func isPartialResponseAbsentMarker(expected any) bool {
 	expectedString, ok := expected.(string)
 	return ok && expectedString == partialResponseAbsentMarker
+}
+
+// isResponsePresentMarker reports whether the expected value asks to verify field presence.
+func isResponsePresentMarker(expected any) bool {
+	expectedString, ok := expected.(string)
+	return ok && expectedString == responsePresentMarker
+}
+
+// responseTemplateContainsPresentMarker reports whether a JSON-like expected response uses presence checks.
+func responseTemplateContainsPresentMarker(expected any) bool {
+	if isResponsePresentMarker(expected) {
+		return true
+	}
+
+	switch expectedValue := expected.(type) {
+	case map[string]any:
+		for _, nestedExpected := range expectedValue {
+			if responseTemplateContainsPresentMarker(nestedExpected) {
+				return true
+			}
+		}
+	case []any:
+		if slices.ContainsFunc(expectedValue, responseTemplateContainsPresentMarker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// responseTemplateActualView converts normalized responses into JSON-like values for assertion templates.
+func responseTemplateActualView(actualNormalized any) (any, error) {
+	rawActual, marshalErr := json.Marshal(actualNormalized)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+
+	actualView, decodeErr := decodeRawExpectedResponse(rawActual)
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
+	return actualView, nil
+}
+
+// materializePresentMarkers replaces object-field presence markers with values from the normalized response.
+func materializePresentMarkers(path string, expected, actual any) (any, error) {
+	if isResponsePresentMarker(expected) {
+		return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+	}
+
+	switch expectedValue := expected.(type) {
+	case map[string]any:
+		return materializePresentMarkersInObject(path, expectedValue, actual)
+	case []any:
+		return materializePresentMarkersInArray(path, expectedValue, actual)
+	default:
+		return expected, nil
+	}
+}
+
+// materializePresentMarkersInObject replaces field markers while preserving non-marker expected fields.
+func materializePresentMarkersInObject(path string, expected map[string]any, actual any) (map[string]any, error) {
+	actualValue, ok := actual.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s: type mismatch: expected object %v, actual %v (%T)", path, expected, actual, actual)
+	}
+
+	materialized := make(map[string]any, len(expected))
+	for key, nestedExpected := range expected {
+		nestedPath := partialResponsePath(path, key)
+		nestedActual, exists := actualValue[key]
+		if isResponsePresentMarker(nestedExpected) {
+			if !exists {
+				return nil, fmt.Errorf("%s: field must be present", nestedPath)
+			}
+			materialized[key] = nestedActual
+			continue
+		}
+		if responseTemplateContainsPresentMarker(nestedExpected) {
+			nestedMaterialized, err := materializePresentMarkers(nestedPath, nestedExpected, nestedActual)
+			if err != nil {
+				return nil, err
+			}
+			materialized[key] = nestedMaterialized
+			continue
+		}
+		materialized[key] = nestedExpected
+	}
+	return materialized, nil
+}
+
+// materializePresentMarkersInArray replaces markers nested inside array items without allowing marker items.
+func materializePresentMarkersInArray(path string, expected []any, actual any) ([]any, error) {
+	materialized := make([]any, len(expected))
+	copy(materialized, expected)
+	for index, nestedExpected := range expected {
+		nestedPath := fmt.Sprintf("%s[%d]", path, index)
+		if isResponsePresentMarker(nestedExpected) {
+			return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", nestedPath)
+		}
+		if !responseTemplateContainsPresentMarker(nestedExpected) {
+			continue
+		}
+
+		actualValue, ok := actual.([]any)
+		if !ok {
+			return nil, fmt.Errorf("%s: type mismatch: expected array %v, actual %v (%T)", path, expected, actual, actual)
+		}
+		if index >= len(actualValue) {
+			return nil, fmt.Errorf("%s: array length mismatch: expected at least %d, actual %d", path, index+1, len(actualValue))
+		}
+
+		nestedMaterialized, err := materializePresentMarkers(nestedPath, nestedExpected, actualValue[index])
+		if err != nil {
+			return nil, err
+		}
+		materialized[index] = nestedMaterialized
+	}
+	return materialized, nil
 }
 
 // partialResponsePath appends the field name to the JSON-like path.
