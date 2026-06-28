@@ -18,6 +18,8 @@ const (
 	invalidUpdateRequestError = "invalid update request"
 	jsonContentType           = "application/json"
 	methodNotAllowedError     = "method not allowed"
+	reportContentType         = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	reportXLSXBody            = "PK\x03\x04report"
 	sessionCookieName         = "session_id"
 	sessionCookiePath         = "/"
 	sessionID                 = "session-1"
@@ -89,6 +91,8 @@ func (handler *apiHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		handler.handleMe(writer, request)
 	case "/profile/email":
 		handler.handleProfileEmail(writer, request)
+	case "/report.xlsx":
+		handler.handleReport(writer, request)
 	default:
 		writeJSON(writer, http.StatusNotFound, errorResponse{Error: "endpoint not found"})
 	}
@@ -178,6 +182,20 @@ func (handler *apiHandler) handleProfileEmail(writer http.ResponseWriter, reques
 		Email:         account.Email,
 		Authenticated: true,
 	})
+}
+
+// handleReport returns a binary report body that needs custom fixture normalization.
+func (handler *apiHandler) handleReport(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		writeJSON(writer, http.StatusMethodNotAllowed, errorResponse{Error: methodNotAllowedError})
+		return
+	}
+
+	writer.Header().Set(contentTypeHeader, reportContentType)
+	writer.WriteHeader(http.StatusOK)
+	if _, err := writer.Write([]byte(reportXLSXBody)); err != nil {
+		return
+	}
 }
 
 // authenticatedAccount returns the account bound to the request session cookie.

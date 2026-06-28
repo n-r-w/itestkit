@@ -37,6 +37,8 @@ const (
 	sameSiteNone    = "None"
 )
 
+//go:generate go tool mockgen -source=handler.go -destination=handler_mock.go -package=httpserver
+
 // handlerProvider exposes the HTTP handler used by CallHandler.
 type handlerProvider interface {
 	HTTPHandler() http.Handler
@@ -55,6 +57,7 @@ type Request struct {
 	Headers        map[string]string `json:"headers,omitempty"`
 	Body           json.RawMessage   `json:"body,omitempty"`
 	RawBody        *string           `json:"raw_body,omitempty"`
+	ResponseBody   json.RawMessage   `json:"response_body,omitempty"`
 	UseCookies     bool              `json:"use_cookies,omitempty"`
 	CSRF           *CSRFConfig       `json:"csrf,omitempty"`
 	CaptureHeaders []string          `json:"capture_headers,omitempty"`
@@ -92,6 +95,24 @@ type CookieJar struct {
 	cookies map[string]*http.Cookie
 }
 
+// BodyNormalizer can replace the default HTTP response body normalization for a step.
+type BodyNormalizer interface {
+	NormalizeHTTPBody(ctx BodyNormalizationContext) (body any, handled bool, err error)
+}
+
+// BodyNormalizationContext contains the request, response metadata, and raw response body.
+type BodyNormalizationContext struct {
+	Request  Request
+	Response ResponseMeta
+	Body     []byte
+}
+
+// ResponseMeta contains HTTP response data that body normalization may inspect but cannot replace.
+type ResponseMeta struct {
+	StatusCode int
+	Header     http.Header
+}
+
 // NewCookieJar creates an empty cookie jar for one test case.
 func NewCookieJar() *CookieJar {
 	return &CookieJar{cookies: make(map[string]*http.Cookie)}
@@ -102,7 +123,8 @@ type Option func(*callHandlerConfig)
 
 // callHandlerConfig stores CallHandler options.
 type callHandlerConfig struct {
-	baseURL string
+	baseURL        string
+	bodyNormalizer BodyNormalizer
 }
 
 // WithBaseURL sets the base URL used to construct in-process HTTP requests.
@@ -114,6 +136,13 @@ func WithBaseURL(rawURL string) Option {
 	}
 }
 
+// WithBodyNormalizer sets a hook that may replace HTTP response body normalization.
+func WithBodyNormalizer(normalizer BodyNormalizer) Option {
+	return func(config *callHandlerConfig) {
+		config.bodyNormalizer = normalizer
+	}
+}
+
 // CallHandler executes JSONC HTTP requests against an in-process HTTP handler.
 type CallHandler[C handlerProvider] struct {
 	config callHandlerConfig
@@ -121,7 +150,7 @@ type CallHandler[C handlerProvider] struct {
 
 // NewCallHandler creates a CallHandler.
 func NewCallHandler[C handlerProvider](options ...Option) CallHandler[C] {
-	config := callHandlerConfig{baseURL: defaultBaseURL}
+	config := callHandlerConfig{baseURL: defaultBaseURL, bodyNormalizer: nil}
 	for _, option := range options {
 		option(&config)
 	}
@@ -181,9 +210,9 @@ func (handler CallHandler[C]) Invoke(ctx context.Context, harness C, request any
 	return executeHTTPRequest(
 		harness.HTTPHandler(),
 		jar,
+		typedRequest,
 		httpRequest,
-		typedRequest.CaptureHeaders,
-		typedRequest.CaptureCookies,
+		handler.config.bodyNormalizer,
 	)
 }
 
@@ -334,9 +363,9 @@ func hasManualHeader(headers map[string]string, headerName string) bool {
 func executeHTTPRequest(
 	httpHandler http.Handler,
 	jar *CookieJar,
+	requestSpec *Request,
 	request *http.Request,
-	captureHeaders []string,
-	captureCookies []string,
+	normalizer BodyNormalizer,
 ) (*Response, error) {
 	if httpHandler == nil {
 		return nil, errors.New("HTTPHandler returned nil")
@@ -349,7 +378,7 @@ func executeHTTPRequest(
 		jar.store(response.Cookies())
 	}
 
-	body, err := decodeHTTPResponseBody(responseRecorder)
+	body, err := normalizeHTTPResponseBody(normalizer, *requestSpec, responseRecorder, response)
 	if err != nil {
 		return nil, err
 	}
@@ -360,8 +389,8 @@ func executeHTTPRequest(
 
 	httpResponse := &Response{
 		Status:  responseRecorder.Code,
-		Headers: captureHTTPHeaders(responseRecorder, captureHeaders),
-		Cookies: captureHTTPCookies(response.Cookies(), captureCookies),
+		Headers: captureHTTPHeaders(responseRecorder, requestSpec.CaptureHeaders),
+		Cookies: captureHTTPCookies(response.Cookies(), requestSpec.CaptureCookies),
 		Body:    nil,
 	}
 	if body.present {
@@ -378,19 +407,48 @@ type decodedBody struct {
 }
 
 // decodeHTTPResponseBody returns JSON bodies as JSON-safe data and non-JSON bodies as strings.
-func decodeHTTPResponseBody(responseRecorder *httptest.ResponseRecorder) (decodedBody, error) {
-	rawBody := bytes.TrimSpace(responseRecorder.Body.Bytes())
-	if len(rawBody) == 0 {
+func normalizeHTTPResponseBody(
+	normalizer BodyNormalizer,
+	request Request,
+	responseRecorder *httptest.ResponseRecorder,
+	response *http.Response,
+) (decodedBody, error) {
+	// Keep an immutable snapshot for hooks so user code sees bytes before default trimming or string conversion.
+	rawBody := append([]byte(nil), responseRecorder.Body.Bytes()...)
+	if normalizer == nil {
+		return decodeHTTPResponseBody(rawBody, responseRecorder.Header().Get("Content-Type"))
+	}
+
+	body, handled, err := normalizer.NormalizeHTTPBody(BodyNormalizationContext{
+		Request: request,
+		Response: ResponseMeta{
+			StatusCode: responseRecorder.Code,
+			Header:     response.Header.Clone(),
+		},
+		Body: rawBody,
+	})
+	if err != nil {
+		return decodedBody{}, fmt.Errorf("normalize HTTP response body: %w", err)
+	}
+	if handled {
+		return decodedBody{value: body, present: true}, nil
+	}
+
+	return decodeHTTPResponseBody(rawBody, responseRecorder.Header().Get("Content-Type"))
+}
+
+func decodeHTTPResponseBody(rawBody []byte, contentType string) (decodedBody, error) {
+	trimmedBody := bytes.TrimSpace(rawBody)
+	if len(trimmedBody) == 0 {
 		return decodedBody{value: nil, present: false}, nil
 	}
 
-	contentType := responseRecorder.Header().Get("Content-Type")
 	if !strings.Contains(strings.ToLower(contentType), "json") {
-		return decodedBody{value: string(rawBody), present: true}, nil
+		return decodedBody{value: string(trimmedBody), present: true}, nil
 	}
 
 	var body any
-	decoder := json.NewDecoder(bytes.NewReader(rawBody))
+	decoder := json.NewDecoder(bytes.NewReader(trimmedBody))
 	if err := decoder.Decode(&body); err != nil {
 		return decodedBody{}, fmt.Errorf("decode JSON HTTP response: %w", err)
 	}

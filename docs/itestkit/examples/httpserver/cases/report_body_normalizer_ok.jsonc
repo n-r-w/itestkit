@@ -1,0 +1,34 @@
+{
+  "name": "report body normalizer returns JSON-safe summary",
+  "steps": [
+    // Step 1: call a binary endpoint and pass response_body settings to the custom normalizer.
+    {
+      "id": "download_report",
+      "kind": "action",
+      "handler": "CallHTTP",
+      "request": {
+        "method": "GET",
+        "path": "/report.xlsx",
+        "response_body": {
+          "type": "xlsx",
+          "sheet": "Report",
+          "header_row": 1
+        }
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "download_report",
+    "response": {
+      "status": 200,
+      "body": {
+        "type": "xlsx",
+        "sheet": "Report",
+        "header_row": 1,
+        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "byte_size": 10
+      }
+    }
+  }
+}
