@@ -1,6 +1,9 @@
 package custom
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 const (
 	// awaitProcessedSuccessAttempt defines the await polling attempt when processing completes successfully.
@@ -49,8 +52,15 @@ type awaitProcessedResponse struct {
 	State string `json:"state"`
 }
 
-// verifyStateRequest describes verification of the final mock event-flow state.
-type verifyStateRequest struct{}
+// verifyStateRequest contains a marker-aware expectation for final mock event-flow state.
+type verifyStateRequest struct {
+	Expected any
+}
+
+// verifyStateRequestJSON keeps marker templates as raw JSON until matcher-aware decoding.
+type verifyStateRequestJSON struct {
+	Expected json.RawMessage `json:"expected"`
+}
 
 // verifyStateResponse contains normalized state for assert.
 type verifyStateResponse struct {

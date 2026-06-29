@@ -185,18 +185,21 @@ type verifyStateHandler struct{}
 
 var _ itestkit.Handler[*echoClient] = (*verifyStateHandler)(nil)
 
-// DecodeRequest decodes the verify request.
+// DecodeRequest decodes marker-aware state expectations for side-effect verification.
 func (verifyStateHandler) DecodeRequest(raw json.RawMessage) (any, error) {
-	request := &verifyStateRequest{}
-	if len(raw) == 0 {
-		return request, nil
+	requestJSON := verifyStateRequestJSON{Expected: json.RawMessage(`{}`)}
+	if len(raw) > 0 {
+		if err := decodeStrictJSON(raw, &requestJSON); err != nil {
+			return nil, fmt.Errorf("decode VerifyState request: %w", err)
+		}
 	}
 
-	if err := decodeStrictJSON(raw, request); err != nil {
-		return nil, fmt.Errorf("decode VerifyState request: %w", err)
+	expected, err := itestkit.DecodeExpectedJSON(requestJSON.Expected)
+	if err != nil {
+		return nil, fmt.Errorf("decode VerifyState expected state: %w", err)
 	}
 
-	return request, nil
+	return &verifyStateRequest{Expected: expected}, nil
 }
 
 // DecodeExpectedResponse decodes the expected verify state.
@@ -209,14 +212,28 @@ func (verifyStateHandler) DecodeExpectedResponse(raw json.RawMessage) (any, erro
 	return response, nil
 }
 
-// Invoke fetches final event-flow state for assert validation.
+// Invoke fetches final event-flow state and compares it with the request expectation.
 func (verifyStateHandler) Invoke(ctx context.Context, client *echoClient, request any) (any, error) {
 	typedRequest, ok := request.(*verifyStateRequest)
 	if !ok {
 		return nil, fmt.Errorf("VerifyState received invalid request type: %T", request)
 	}
 
-	return client.VerifyState(ctx, typedRequest)
+	response, err := client.VerifyState(ctx, typedRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	actualState := map[string]any{
+		"state":    response.State,
+		"event_id": response.EventID,
+	}
+	matchErr := itestkit.MatchExpectedJSON(typedRequest.Expected, actualState, itestkit.MatchModeExact)
+	if matchErr != nil {
+		return nil, fmt.Errorf("verify state expectation: %w", matchErr)
+	}
+
+	return response, nil
 }
 
 // NormalizeResponse returns the verify response unchanged.

@@ -26,7 +26,12 @@
             "id": "verify-1",
             "kind": "verify",
             "handler": "VerifyState",
-            "request": {}
+            "request": {
+                "expected": {
+                    "state": "processed",
+                    "event_id": { "$present": true }
+                }
+            }
         }
     ],
     "assert": {

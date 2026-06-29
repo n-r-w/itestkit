@@ -421,7 +421,7 @@ func mapSuccessAssertResponse[C any, S comparable](
 	}
 
 	if responseMode == ResponseModePartial {
-		expectedResponse, decodeErr := decodeRawExpectedResponse(rawResponse)
+		expectedResponse, decodeErr := DecodeExpectedJSON(rawResponse)
 		if decodeErr != nil {
 			return nil, fmt.Errorf("%s: decode raw assert.response: %w", casePath, decodeErr)
 		}

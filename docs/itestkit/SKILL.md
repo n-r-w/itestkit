@@ -120,8 +120,9 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       3. For other external integrations (brokers, queues, caches, third-party services), prefer `https://github.com/testcontainers/testcontainers-go` and its modules.
       4. If your handler registry is a simple static map without custom resolve logic, prefer `itestkit.NewMapRegistry(...)` to avoid boilerplate.
       5. For strict decode of non-proto `request` and `assert.response`, prefer `itestkit.DecodeStrictJSON(...)` instead of duplicating local helpers.
-      6. If your JSONC fixtures contain moving dates, prefer `testcalendar.New().WrapSource(source)` before `LoadCases(...)`. If the SUT itself depends on current time, also inject `testcalendar.FixedNow()` into its clock. If fixtures use explicit timezone different from `+06:00`, normalize runtime timestamps to the same timezone before comparing them.
-      7. Optional execution options:
+      6. For marker-aware JSON expectations inside custom handlers, decode raw expectation JSON with `itestkit.DecodeExpectedJSON(...)` and compare it with JSON-safe actual data through `itestkit.MatchExpectedJSON(expected, actual, itestkit.MatchModeExact)` or `itestkit.MatchModePartial`.
+      7. If your JSONC fixtures contain moving dates, prefer `testcalendar.New().WrapSource(source)` before `LoadCases(...)`. If the SUT itself depends on current time, also inject `testcalendar.FixedNow()` into its clock. If fixtures use explicit timezone different from `+06:00`, normalize runtime timestamps to the same timezone before comparing them.
+      8. Optional execution options:
         1) `itestkit.WithContinueOnFailure()`
         2) `itestkit.WithParallelCases()`
         3) `itestkit.WithParallelismLimit(n)`

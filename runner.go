@@ -1104,7 +1104,7 @@ func responseTemplateActualView(actualNormalized any) (any, error) {
 		return nil, marshalErr
 	}
 
-	actualView, decodeErr := decodeRawExpectedResponse(rawActual)
+	actualView, decodeErr := DecodeExpectedJSON(rawActual)
 	if decodeErr != nil {
 		return nil, decodeErr
 	}

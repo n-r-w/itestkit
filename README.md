@@ -228,7 +228,9 @@ Options:
 Core helpers:
 
 - `itestkit.NewMapRegistry` — registry backed by a map from handler name to handler;
-- `itestkit.DecodeStrictJSON` — JSON decoder that rejects unknown fields and trailing data.
+- `itestkit.DecodeStrictJSON` — JSON decoder that rejects unknown fields and trailing data;
+- `itestkit.DecodeExpectedJSON` — JSON decoder for marker-aware expectations in custom handlers;
+- `itestkit.MatchExpectedJSON` — compares expected JSON with JSON-safe actual data using `MatchModeExact` or `MatchModePartial`.
 
 Additional packages:
 
