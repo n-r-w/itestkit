@@ -36,14 +36,14 @@
           "stub_response": {
             "status": "SERVING",
             // The absence marker is nested under calls[0].stub_response.debug.
-            "debug": "<itestkit_absent>"
+            "debug": { "$absent": true }
           }
         },
         {
           "expected_service": "reserve:order-nested-absent-real",
           "stub_response": {
             "status": "SERVING",
-            "debug": "<itestkit_absent>"
+            "debug": { "$absent": true }
           }
         }
       ]

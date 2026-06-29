@@ -492,7 +492,7 @@ func TestLoadCases_ExactAssertResponseWithPresentMarkerKeepsRawJSON(t *testing.T
 		"assert":{
 			"code":"OK",
 			"response_mode":"exact",
-			"response":{"id":"<itestkit_present>","version":"<itestkit_present>","status":"SERVING"}
+			"response":{"id":{"$present":true},"version":{"$present":true},"status":"SERVING"}
 		}
 	}`
 	fs := fstest.MapFS{
@@ -505,9 +505,53 @@ func TestLoadCases_ExactAssertResponseWithPresentMarkerKeepsRawJSON(t *testing.T
 	require.Len(t, cases, 1)
 	require.Equal(t, ResponseModeExact, cases[0].Assert.ResponseMode)
 	require.Equal(t, map[string]any{
-		"id":      responsePresentMarker,
-		"version": responsePresentMarker,
+		"id":      map[string]any{"$present": true},
+		"version": map[string]any{"$present": true},
 		"status":  "SERVING",
+	}, cases[0].Assert.Response)
+}
+
+// TestLoadCases_ExactAssertResponseWithSemanticMatchersKeepsRawJSON checks that matcher objects are not decoded before runtime.
+func TestLoadCases_ExactAssertResponseWithSemanticMatchersKeepsRawJSON(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	handler := NewMockHandler[any](ctrl)
+	handler.EXPECT().DecodeRequest(gomock.Any()).Times(1).DoAndReturn(
+		func(raw json.RawMessage) (any, error) {
+			return decodeJSON(raw)
+		},
+	)
+	handler.EXPECT().DecodeExpectedResponse(gomock.Any()).Times(0)
+
+	registry := makeRegistryWithHandler(t, ctrl, "Handler", handler)
+	statusCodec := newMockStatusCodec(t, ctrl)
+
+	caseJSON := `{
+		"name":"case",
+		"steps":[
+			{"id":"action-1","kind":"action","handler":"Handler","request":{"value":1}}
+		],
+		"assert":{
+			"code":"OK",
+			"response_mode":"exact",
+			"response":{"created_at":{"$same_instant":"2026-05-30T10:00:00Z"},"trace_id":{"$matches":"^trace-\\d+$"},"status":"SERVING"}
+		}
+	}`
+	fs := fstest.MapFS{
+		"cases/case.jsonc": {Data: []byte(caseJSON)},
+	}
+	source := newMockCaseSource(t, ctrl, fs)
+
+	cases, err := LoadCases(source, "cases", registry, statusCodec)
+	require.NoError(t, err)
+	require.Len(t, cases, 1)
+	require.Equal(t, ResponseModeExact, cases[0].Assert.ResponseMode)
+	require.Equal(t, map[string]any{
+		"created_at": map[string]any{"$same_instant": "2026-05-30T10:00:00Z"},
+		"trace_id":   map[string]any{"$matches": `^trace-\d+$`},
+		"status":     "SERVING",
 	}, cases[0].Assert.Response)
 }
 

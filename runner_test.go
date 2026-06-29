@@ -568,7 +568,7 @@ func TestRunCases_PartialResponseAbsentMarkerAllowsMissingField(t *testing.T) {
 	}
 	expected := map[string]any{
 		"status": "SERVING",
-		"debug":  partialResponseAbsentMarker,
+		"debug":  map[string]any{"$absent": true},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -586,7 +586,7 @@ func TestRunCases_PartialResponseAbsentMarkerRejectsPresentField(t *testing.T) {
 	}
 	expected := map[string]any{
 		"status": "SERVING",
-		"debug":  partialResponseAbsentMarker,
+		"debug":  map[string]any{"$absent": true},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -606,7 +606,7 @@ func TestRunCases_PartialResponseAbsentMarkerRejectsNullField(t *testing.T) {
 	}
 	expected := map[string]any{
 		"status": "SERVING",
-		"debug":  partialResponseAbsentMarker,
+		"debug":  map[string]any{"$absent": true},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -631,7 +631,7 @@ func TestRunCases_PartialResponseAbsentMarkerWorksInNestedArrayObject(t *testing
 		"items": []any{
 			map[string]any{
 				"id":     "1",
-				"secret": partialResponseAbsentMarker,
+				"secret": map[string]any{"$absent": true},
 			},
 		},
 	}
@@ -645,11 +645,11 @@ func TestRunCases_PartialResponseAbsentMarkerWorksInNestedArrayObject(t *testing
 func TestRunCases_PartialResponseAbsentMarkerRequiresObjectField(t *testing.T) {
 	t.Parallel()
 
-	err := runPartialResponseCase(t, "present value", partialResponseAbsentMarker)
+	err := runPartialResponseCase(t, "present value", map[string]any{"$absent": true})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$: absence marker can be used only as an object field value")
 
-	err = runPartialResponseCase(t, []any{"present value"}, []any{partialResponseAbsentMarker})
+	err = runPartialResponseCase(t, []any{"present value"}, []any{map[string]any{"$absent": true}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$[0]: absence marker can be used only as an object field value")
 }
@@ -668,11 +668,11 @@ func TestRunCases_PartialResponsePresentMarkerAllowsAnyFieldValue(t *testing.T) 
 		"deleted_at": nil,
 	}
 	expected := map[string]any{
-		"id":         responsePresentMarker,
-		"version":    responsePresentMarker,
-		"active":     responsePresentMarker,
-		"meta":       responsePresentMarker,
-		"deleted_at": responsePresentMarker,
+		"id":         map[string]any{"$present": true},
+		"version":    map[string]any{"$present": true},
+		"active":     map[string]any{"$present": true},
+		"meta":       map[string]any{"$present": true},
+		"deleted_at": map[string]any{"$present": true},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -685,7 +685,7 @@ func TestRunCases_PartialResponsePresentMarkerRejectsMissingField(t *testing.T) 
 
 	err := runPartialResponseCase(t, map[string]any{"status": "SERVING"}, map[string]any{
 		"status": "SERVING",
-		"debug":  responsePresentMarker,
+		"debug":  map[string]any{"$present": true},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$.debug: field must be present")
@@ -695,11 +695,11 @@ func TestRunCases_PartialResponsePresentMarkerRejectsMissingField(t *testing.T) 
 func TestRunCases_PartialResponsePresentMarkerRequiresObjectField(t *testing.T) {
 	t.Parallel()
 
-	err := runPartialResponseCase(t, "present value", responsePresentMarker)
+	err := runPartialResponseCase(t, "present value", map[string]any{"$present": true})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$: presence marker can be used only as an object field value")
 
-	err = runPartialResponseCase(t, []any{"present value"}, []any{responsePresentMarker})
+	err = runPartialResponseCase(t, []any{"present value"}, []any{map[string]any{"$present": true}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$[0]: presence marker can be used only as an object field value")
 }
@@ -719,11 +719,11 @@ func TestRunCases_ExactResponsePresentMarkerAllowsAnyFieldValue(t *testing.T) {
 		"status":     "created",
 	}
 	expected := map[string]any{
-		"id":         responsePresentMarker,
-		"version":    responsePresentMarker,
-		"active":     responsePresentMarker,
-		"meta":       responsePresentMarker,
-		"deleted_at": responsePresentMarker,
+		"id":         map[string]any{"$present": true},
+		"version":    map[string]any{"$present": true},
+		"active":     map[string]any{"$present": true},
+		"meta":       map[string]any{"$present": true},
+		"deleted_at": map[string]any{"$present": true},
 		"status":     "created",
 	}
 
@@ -742,8 +742,8 @@ func TestRunCases_PartialResponsePresentMarkerAllowsStructResponseFields(t *test
 	}
 	expected := map[string]any{
 		"order_id": "order-present-partial-struct",
-		"amount":   responsePresentMarker,
-		"stored":   responsePresentMarker,
+		"amount":   map[string]any{"$present": true},
+		"stored":   map[string]any{"$present": true},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -794,8 +794,8 @@ func TestRunCases_ExactResponsePresentMarkerAllowsStructResponseFields(t *testin
 		},
 		Assert: newRunnerAssert(testStatusOK, "", map[string]any{
 			"order_id": "order-present-exact-struct",
-			"amount":   responsePresentMarker,
-			"stored":   responsePresentMarker,
+			"amount":   map[string]any{"$present": true},
+			"stored":   map[string]any{"$present": true},
 		}, ""),
 	}
 
@@ -808,7 +808,7 @@ func TestRunCases_ExactResponsePresentMarkerRejectsMissingField(t *testing.T) {
 	t.Parallel()
 
 	err := runExactPresentMarkerCase(t, map[string]any{"status": "created"}, map[string]any{
-		"id":     responsePresentMarker,
+		"id":     map[string]any{"$present": true},
 		"status": "created",
 	})
 	require.Error(t, err)
@@ -824,7 +824,7 @@ func TestRunCases_ExactResponsePresentMarkerRejectsExtraField(t *testing.T) {
 		"status": "created",
 		"extra":  true,
 	}, map[string]any{
-		"id":     responsePresentMarker,
+		"id":     map[string]any{"$present": true},
 		"status": "created",
 	})
 	require.Error(t, err)
@@ -835,13 +835,119 @@ func TestRunCases_ExactResponsePresentMarkerRejectsExtraField(t *testing.T) {
 func TestRunCases_ExactResponsePresentMarkerRequiresObjectField(t *testing.T) {
 	t.Parallel()
 
-	err := runExactPresentMarkerCase(t, "present value", responsePresentMarker)
+	err := runExactPresentMarkerCase(t, "present value", map[string]any{"$present": true})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$: presence marker can be used only as an object field value")
 
-	err = runExactPresentMarkerCase(t, []any{"present value"}, []any{responsePresentMarker})
+	err = runExactPresentMarkerCase(t, []any{"present value"}, []any{map[string]any{"$present": true}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "$[0]: presence marker can be used only as an object field value")
+}
+
+// TestRunCases_PartialResponseSameInstantMatcherAcceptsEquivalentRFC3339Values checks timestamp comparison by instant.
+func TestRunCases_PartialResponseSameInstantMatcherAcceptsEquivalentRFC3339Values(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"created_at": "2026-05-30T13:00:00+03:00",
+	}
+	expected := map[string]any{
+		"created_at": map[string]any{"$same_instant": "2026-05-30T10:00:00Z"},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseSameInstantMatcherRejectsDifferentInstant checks timestamp mismatches by instant.
+func TestRunCases_PartialResponseSameInstantMatcherRejectsDifferentInstant(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"created_at": "2026-05-30T13:00:01+03:00",
+	}
+	expected := map[string]any{
+		"created_at": map[string]any{"$same_instant": "2026-05-30T10:00:00Z"},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.created_at")
+	require.Contains(t, err.Error(), "$same_instant")
+}
+
+// TestRunCases_PartialResponseMatchesMatcherAcceptsRegex checks string comparison by regular expression.
+func TestRunCases_PartialResponseMatchesMatcherAcceptsRegex(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"trace_id": "trace-12345",
+	}
+	expected := map[string]any{
+		"trace_id": map[string]any{"$matches": `^trace-\d+$`},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseMatchesMatcherRejectsRegexMismatch checks regex mismatch reporting.
+func TestRunCases_PartialResponseMatchesMatcherRejectsRegexMismatch(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"trace_id": "span-12345",
+	}
+	expected := map[string]any{
+		"trace_id": map[string]any{"$matches": `^trace-\d+$`},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "$.trace_id")
+	require.Contains(t, err.Error(), "$matches")
+}
+
+// TestRunCases_ExactResponseSameInstantMatcherKeepsStrictResponseComparison checks matcher materialization in exact mode.
+func TestRunCases_ExactResponseSameInstantMatcherKeepsStrictResponseComparison(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"created_at": "2026-05-30T13:00:00+03:00",
+		"status":     "created",
+	}
+	expected := map[string]any{
+		"created_at": map[string]any{"$same_instant": "2026-05-30T10:00:00Z"},
+		"status":     "created",
+	}
+
+	err := runExactPresentMarkerCase(t, actual, expected)
+	require.NoError(t, err)
+
+	err = runExactPresentMarkerCase(t, map[string]any{
+		"created_at": "2026-05-30T13:00:00+03:00",
+		"status":     "created",
+		"extra":      true,
+	}, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "response mismatch")
+}
+
+// TestRunCases_ExactResponseMatchesMatcherAcceptsRegex checks regex matcher materialization in exact mode.
+func TestRunCases_ExactResponseMatchesMatcherAcceptsRegex(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"trace_id": "trace-12345",
+		"status":   "created",
+	}
+	expected := map[string]any{
+		"trace_id": map[string]any{"$matches": `^trace-\d+$`},
+		"status":   "created",
+	}
+
+	err := runExactPresentMarkerCase(t, actual, expected)
+	require.NoError(t, err)
 }
 
 // TestRunCases_PartialResponseKeepsStrictArrayLength checks that the mode is `partial`

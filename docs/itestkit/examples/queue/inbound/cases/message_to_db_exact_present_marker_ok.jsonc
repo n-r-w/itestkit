@@ -1,6 +1,6 @@
 {
     "name": "message pipeline checks exact response with present markers",
-    "description": "demonstrates <itestkit_present> in exact response mode for non-string fields",
+    "description": "demonstrates $present in exact response mode for non-string fields",
     "steps": [
         {
             "id": "init-env",
@@ -46,9 +46,9 @@
         "response": {
             "order_id": "order-present-exact",
             // The present marker checks that the numeric amount field exists with any value.
-            "amount": "<itestkit_present>",
+            "amount": { "$present": true },
             // The present marker checks that the boolean stored field exists with any value.
-            "stored": "<itestkit_present>"
+            "stored": { "$present": true }
         }
     }
 }

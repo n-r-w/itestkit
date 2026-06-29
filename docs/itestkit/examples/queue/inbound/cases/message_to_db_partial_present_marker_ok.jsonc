@@ -1,6 +1,6 @@
 {
     "name": "message pipeline checks partial response with present markers",
-    "description": "demonstrates <itestkit_present> in partial response mode for selected fields",
+    "description": "demonstrates $present in partial response mode for selected fields",
     "steps": [
         {
             "id": "init-env",
@@ -46,8 +46,8 @@
         "response": {
             "order_id": "order-present-partial",
             // Partial mode ignores fields not listed here but still checks selected field presence.
-            "amount": "<itestkit_present>",
-            "stored": "<itestkit_present>"
+            "amount": { "$present": true },
+            "stored": { "$present": true }
         }
     }
 }

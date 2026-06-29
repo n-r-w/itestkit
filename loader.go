@@ -432,7 +432,7 @@ func mapSuccessAssertResponse[C any, S comparable](
 	if rawDecodeErr != nil {
 		return nil, fmt.Errorf("%s: decode raw assert.response: %w", casePath, rawDecodeErr)
 	}
-	if responseTemplateContainsPresentMarker(rawExpectedResponse) {
+	if responseTemplateContainsSpecialMatcher(rawExpectedResponse) {
 		return rawExpectedResponse, nil
 	}
 

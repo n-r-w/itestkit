@@ -36,7 +36,7 @@
           "expected_service": "risk:order-nested-exact-real",
           "stub_response": {
             // The marker is nested under calls[0].stub_response.status.
-            "status": "<itestkit_present>"
+            "status": { "$present": true }
           }
         },
         {

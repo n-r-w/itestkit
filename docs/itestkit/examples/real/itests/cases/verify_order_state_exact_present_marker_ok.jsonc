@@ -70,10 +70,10 @@
     "response": {
       "order_id": "order-present-exact-real",
       // The numeric amount field must exist, but this assertion does not care about its value.
-      "amount": "<itestkit_present>",
+      "amount": { "$present": true },
       "status": "SERVING",
       // The external services slice must exist, but this assertion does not care about its contents.
-      "external_services": "<itestkit_present>"
+      "external_services": { "$present": true }
     }
   }
 }

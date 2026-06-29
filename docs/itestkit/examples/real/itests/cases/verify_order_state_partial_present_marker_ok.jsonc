@@ -77,10 +77,10 @@
     "response": {
       "order_id": "order-present-partial-real",
       // The numeric amount field must exist with any value.
-      "amount": "<itestkit_present>",
+      "amount": { "$present": true },
       "status": "SERVICE_UNKNOWN",
       // Partial mode checks this selected field and ignores fields not listed here.
-      "external_services": "<itestkit_present>"
+      "external_services": { "$present": true }
     }
   }
 }

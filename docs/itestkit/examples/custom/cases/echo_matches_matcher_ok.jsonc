@@ -1,12 +1,13 @@
 {
-  "name": "echo partial response with absent debug field",
+  "name": "echo compares message by regex",
+  "description": "demonstrates $matches for a selected string field",
   "steps": [
     {
       "id": "prepare-prefix",
       "kind": "prepare",
       "handler": "SetPrefix",
       "request": {
-        "prefix": "hello "
+        "prefix": "trace-"
       }
     },
     {
@@ -14,18 +15,16 @@
       "kind": "action",
       "handler": "Echo",
       "request": {
-        "message": "world"
+        "message": "12345"
       }
     }
   ],
   "assert": {
     "code": "OK",
     "response_from_step": "action-echo",
-    "response_mode": "partial",
     "response": {
-      "message": "hello world",
-      // The absence marker checks that the normalized response does not expose a debug field.
-      "debug": { "$absent": true }
+      // The regex controls accepted dynamic string shape while exact mode still checks listed fields.
+      "message": { "$matches": "^trace-\\d+$" }
     }
   }
 }

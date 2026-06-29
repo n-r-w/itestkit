@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -36,10 +37,14 @@ const (
 	diffExpectedFileName = "expected"
 	// diffActualFileName labels the actual response side in unified diffs.
 	diffActualFileName = "actual"
-	// partialResponseAbsentMarker marks a field that must not exist in the normalized response.
-	partialResponseAbsentMarker = "<itestkit_absent>"
-	// responsePresentMarker marks a field that must exist in the normalized response with any value.
-	responsePresentMarker = "<itestkit_present>"
+	// partialResponseAbsentMatcherKey marks a field that must not exist in the normalized response.
+	partialResponseAbsentMatcherKey = "$absent"
+	// responsePresentMatcherKey marks a field that must exist in the normalized response with any value.
+	responsePresentMatcherKey = "$present"
+	// responseSameInstantMatcherKey compares RFC3339 timestamps by the represented instant.
+	responseSameInstantMatcherKey = "$same_instant"
+	// responseMatchesMatcherKey compares string fields by regular expression.
+	responseMatchesMatcherKey = "$matches"
 )
 
 // RunCasesOption configures the behavior of RunCases.
@@ -700,7 +705,7 @@ func assertSuccessfulResponseMatch[C any, S comparable](
 ) error {
 	switch testCase.Assert.ResponseMode {
 	case "", ResponseModeExact:
-		if responseTemplateContainsPresentMarker(testCase.Assert.Response) {
+		if responseTemplateContainsSpecialMatcher(testCase.Assert.Response) {
 			return assertExactResponseWithPresentMarkers(
 				testCase.SourcePath,
 				targetStep.Handler,
@@ -799,11 +804,15 @@ func assertPartialResponseMatch(sourcePath string, expectedPartial, actualNormal
 
 // comparePartialResponseValue recursively compares JSON-like response values ​​in `partial` mode.
 func comparePartialResponseValue(path string, expected, actual any) error {
-	if isPartialResponseAbsentMarker(expected) {
-		return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
-	}
-	if isResponsePresentMarker(expected) {
-		return fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+	if matcher, ok := responseValueMatcherFromValue(expected); ok {
+		switch matcher.key {
+		case partialResponseAbsentMatcherKey:
+			return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
+		case responsePresentMatcherKey:
+			return fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+		default:
+			return matchResponseValueMatcher(path, matcher, actual)
+		}
 	}
 
 	switch expectedValue := expected.(type) {
@@ -828,31 +837,66 @@ func comparePartialResponseObject(path string, expected map[string]any, actual a
 	for key, nestedExpected := range expected {
 		nestedPath := partialResponsePath(path, key)
 		nestedActual, exists := actualValue[key]
-		if isPartialResponseAbsentMarker(nestedExpected) {
-			if exists {
-				return fmt.Errorf("%s: field must be absent: found %v (%T)", nestedPath, nestedActual, nestedActual)
-			}
-			continue
-		}
-		if isResponsePresentMarker(nestedExpected) {
-			if !exists {
-				return fmt.Errorf("%s: field must be present", nestedPath)
-			}
-			continue
-		}
-		if !exists {
-			return fmt.Errorf(
-				"%s: missing field: expected %v (%T), actual <missing>",
-				nestedPath,
-				nestedExpected,
-				nestedExpected,
-			)
-		}
-		if err := comparePartialResponseValue(nestedPath, nestedExpected, nestedActual); err != nil {
+		if err := comparePartialResponseObjectField(nestedPath, nestedExpected, nestedActual, exists); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// comparePartialResponseObjectField applies field-level partial comparison rules.
+func comparePartialResponseObjectField(path string, expected, actual any, exists bool) error {
+	matcher, matched := responseValueMatcherFromValue(expected)
+	if matched {
+		return comparePartialResponseMatcherField(path, matcher, expected, actual, exists)
+	}
+	if !exists {
+		return missingResponseFieldError(path, expected)
+	}
+	return comparePartialResponseValue(path, expected, actual)
+}
+
+// comparePartialResponseMatcherField applies matcher rules that depend on object field existence.
+func comparePartialResponseMatcherField(
+	path string,
+	matcher responseValueMatcher,
+	expected any,
+	actual any,
+	exists bool,
+) error {
+	switch matcher.key {
+	case partialResponseAbsentMatcherKey:
+		if err := validateBooleanMatcherArgument(path, matcher); err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("%s: field must be absent: found %v (%T)", path, actual, actual)
+		}
+		return nil
+	case responsePresentMatcherKey:
+		if err := validateBooleanMatcherArgument(path, matcher); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("%s: field must be present", path)
+		}
+		return nil
+	default:
+		if !exists {
+			return missingResponseFieldError(path, expected)
+		}
+		return matchResponseValueMatcher(path, matcher, actual)
+	}
+}
+
+// missingResponseFieldError reports a required field that is absent from the normalized response.
+func missingResponseFieldError(path string, expected any) error {
+	return fmt.Errorf(
+		"%s: missing field: expected %v (%T), actual <missing>",
+		path,
+		expected,
+		expected,
+	)
 }
 
 // comparePartialResponseArray compares arrays by length, order, and nested values.
@@ -873,33 +917,179 @@ func comparePartialResponseArray(path string, expected []any, actual any) error 
 	return nil
 }
 
-// isPartialResponseAbsentMarker reports whether the expected value asks to verify field absence.
-func isPartialResponseAbsentMarker(expected any) bool {
-	expectedString, ok := expected.(string)
-	return ok && expectedString == partialResponseAbsentMarker
+// responseValueMatcher stores one explicit matcher requested by the expected response.
+type responseValueMatcher struct {
+	// key selects the semantic comparison algorithm for one expected value.
+	key string
+	// argument stores the matcher parameter from the JSONC fixture.
+	argument any
 }
 
-// isResponsePresentMarker reports whether the expected value asks to verify field presence.
-func isResponsePresentMarker(expected any) bool {
-	expectedString, ok := expected.(string)
-	return ok && expectedString == responsePresentMarker
+// responseValueMatcherFromObject detects matcher objects without treating normal objects as matchers.
+func responseValueMatcherFromObject(expected map[string]any) (responseValueMatcher, bool) {
+	if len(expected) != 1 {
+		return responseValueMatcher{}, false
+	}
+	for key, argument := range expected {
+		switch key {
+		case partialResponseAbsentMatcherKey,
+			responsePresentMatcherKey,
+			responseSameInstantMatcherKey,
+			responseMatchesMatcherKey:
+			return responseValueMatcher{key: key, argument: argument}, true
+		default:
+			return responseValueMatcher{}, false
+		}
+	}
+	return responseValueMatcher{}, false
 }
 
-// responseTemplateContainsPresentMarker reports whether a JSON-like expected response uses presence checks.
-func responseTemplateContainsPresentMarker(expected any) bool {
-	if isResponsePresentMarker(expected) {
+// responseValueMatcherFromValue detects object matchers without treating normal objects as matchers.
+func responseValueMatcherFromValue(expected any) (responseValueMatcher, bool) {
+	expectedObject, ok := expected.(map[string]any)
+	if !ok {
+		return responseValueMatcher{}, false
+	}
+	return responseValueMatcherFromObject(expectedObject)
+}
+
+// matchResponseValueMatcher applies one semantic matcher to the normalized actual value.
+func matchResponseValueMatcher(path string, matcher responseValueMatcher, actual any) error {
+	switch matcher.key {
+	case responseSameInstantMatcherKey:
+		return matchSameInstantResponseValue(path, matcher.argument, actual)
+	case responseMatchesMatcherKey:
+		return matchRegexResponseValue(path, matcher.argument, actual)
+	case partialResponseAbsentMatcherKey:
+		return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
+	case responsePresentMatcherKey:
+		return fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+	default:
+		return fmt.Errorf("%s: unsupported response matcher %q", path, matcher.key)
+	}
+}
+
+// validateBooleanMatcherArgument rejects misspelled boolean marker arguments.
+func validateBooleanMatcherArgument(path string, matcher responseValueMatcher) error {
+	argument, ok := matcher.argument.(bool)
+	if !ok || !argument {
+		return fmt.Errorf(
+			"%s: %s expects true argument, got %v (%T)",
+			path,
+			matcher.key,
+			matcher.argument,
+			matcher.argument,
+		)
+	}
+	return nil
+}
+
+// matchSameInstantResponseValue compares RFC3339 strings by time instant instead of byte equality.
+func matchSameInstantResponseValue(path string, expectedArgument, actual any) error {
+	expectedString, ok := expectedArgument.(string)
+	if !ok {
+		return fmt.Errorf(
+			"%s: %s expects string argument, got %v (%T)",
+			path,
+			responseSameInstantMatcherKey,
+			expectedArgument,
+			expectedArgument,
+		)
+	}
+	expectedInstant, err := time.Parse(time.RFC3339Nano, expectedString)
+	if err != nil {
+		return fmt.Errorf(
+			"%s: %s expects RFC3339 timestamp argument %q: %w",
+			path,
+			responseSameInstantMatcherKey,
+			expectedString,
+			err,
+		)
+	}
+
+	actualString, ok := actual.(string)
+	if !ok {
+		return fmt.Errorf(
+			"%s: %s expects actual RFC3339 string, got %v (%T)",
+			path,
+			responseSameInstantMatcherKey,
+			actual,
+			actual,
+		)
+	}
+	actualInstant, err := time.Parse(time.RFC3339Nano, actualString)
+	if err != nil {
+		return fmt.Errorf(
+			"%s: %s expects actual RFC3339 timestamp %q: %w",
+			path,
+			responseSameInstantMatcherKey,
+			actualString,
+			err,
+		)
+	}
+	if !expectedInstant.Equal(actualInstant) {
+		return fmt.Errorf(
+			"%s: %s mismatch: expected %q, actual %q",
+			path,
+			responseSameInstantMatcherKey,
+			expectedString,
+			actualString,
+		)
+	}
+	return nil
+}
+
+// matchRegexResponseValue compares a string field against a regular expression from the fixture.
+func matchRegexResponseValue(path string, expectedArgument, actual any) error {
+	pattern, ok := expectedArgument.(string)
+	if !ok {
+		return fmt.Errorf(
+			"%s: %s expects string argument, got %v (%T)",
+			path,
+			responseMatchesMatcherKey,
+			expectedArgument,
+			expectedArgument,
+		)
+	}
+	compiledPattern, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("%s: %s expects valid regular expression %q: %w", path, responseMatchesMatcherKey, pattern, err)
+	}
+
+	actualString, ok := actual.(string)
+	if !ok {
+		return fmt.Errorf("%s: %s expects actual string, got %v (%T)", path, responseMatchesMatcherKey, actual, actual)
+	}
+	if !compiledPattern.MatchString(actualString) {
+		return fmt.Errorf(
+			"%s: %s mismatch: pattern %q does not match %q",
+			path,
+			responseMatchesMatcherKey,
+			pattern,
+			actualString,
+		)
+	}
+	return nil
+}
+
+// responseTemplateContainsSpecialMatcher reports whether an expected response needs runtime matching before decoding.
+func responseTemplateContainsSpecialMatcher(expected any) bool {
+	if _, ok := responseValueMatcherFromValue(expected); ok {
 		return true
 	}
 
 	switch expectedValue := expected.(type) {
 	case map[string]any:
+		if _, ok := responseValueMatcherFromObject(expectedValue); ok {
+			return true
+		}
 		for _, nestedExpected := range expectedValue {
-			if responseTemplateContainsPresentMarker(nestedExpected) {
+			if responseTemplateContainsSpecialMatcher(nestedExpected) {
 				return true
 			}
 		}
 	case []any:
-		if slices.ContainsFunc(expectedValue, responseTemplateContainsPresentMarker) {
+		if slices.ContainsFunc(expectedValue, responseTemplateContainsSpecialMatcher) {
 			return true
 		}
 	}
@@ -923,8 +1113,18 @@ func responseTemplateActualView(actualNormalized any) (any, error) {
 
 // materializePresentMarkers replaces object-field presence markers with values from the normalized response.
 func materializePresentMarkers(path string, expected, actual any) (any, error) {
-	if isResponsePresentMarker(expected) {
-		return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+	if matcher, ok := responseValueMatcherFromValue(expected); ok {
+		switch matcher.key {
+		case responsePresentMatcherKey:
+			return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", path)
+		case partialResponseAbsentMatcherKey:
+			return nil, fmt.Errorf("%s: absence marker is supported only in partial response mode", path)
+		default:
+			if err := matchResponseValueMatcher(path, matcher, actual); err != nil {
+				return nil, err
+			}
+			return actual, nil
+		}
 	}
 
 	switch expectedValue := expected.(type) {
@@ -948,24 +1148,63 @@ func materializePresentMarkersInObject(path string, expected map[string]any, act
 	for key, nestedExpected := range expected {
 		nestedPath := partialResponsePath(path, key)
 		nestedActual, exists := actualValue[key]
-		if isResponsePresentMarker(nestedExpected) {
-			if !exists {
-				return nil, fmt.Errorf("%s: field must be present", nestedPath)
-			}
-			materialized[key] = nestedActual
-			continue
+		nestedMaterialized, err := materializePresentMarkersInObjectField(
+			nestedPath,
+			nestedExpected,
+			nestedActual,
+			exists,
+		)
+		if err != nil {
+			return nil, err
 		}
-		if responseTemplateContainsPresentMarker(nestedExpected) {
-			nestedMaterialized, err := materializePresentMarkers(nestedPath, nestedExpected, nestedActual)
-			if err != nil {
-				return nil, err
-			}
-			materialized[key] = nestedMaterialized
-			continue
-		}
-		materialized[key] = nestedExpected
+		materialized[key] = nestedMaterialized
 	}
 	return materialized, nil
+}
+
+// materializePresentMarkersInObjectField applies exact-mode matcher rules to one object field.
+func materializePresentMarkersInObjectField(path string, expected, actual any, exists bool) (any, error) {
+	matcher, matched := responseValueMatcherFromValue(expected)
+	if matched {
+		return materializeMatcherObjectField(path, matcher, expected, actual, exists)
+	}
+	if !responseTemplateContainsSpecialMatcher(expected) {
+		return expected, nil
+	}
+	if !exists {
+		return nil, missingResponseFieldError(path, expected)
+	}
+	return materializePresentMarkers(path, expected, actual)
+}
+
+// materializeMatcherObjectField turns matched expected fields into actual values for later exact comparison.
+func materializeMatcherObjectField(
+	path string,
+	matcher responseValueMatcher,
+	expected any,
+	actual any,
+	exists bool,
+) (any, error) {
+	switch matcher.key {
+	case responsePresentMatcherKey:
+		if err := validateBooleanMatcherArgument(path, matcher); err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fmt.Errorf("%s: field must be present", path)
+		}
+		return actual, nil
+	case partialResponseAbsentMatcherKey:
+		return nil, fmt.Errorf("%s: absence marker is supported only in partial response mode", path)
+	default:
+		if !exists {
+			return nil, missingResponseFieldError(path, expected)
+		}
+		if err := matchResponseValueMatcher(path, matcher, actual); err != nil {
+			return nil, err
+		}
+		return actual, nil
+	}
 }
 
 // materializePresentMarkersInArray replaces markers nested inside array items without allowing marker items.
@@ -974,10 +1213,15 @@ func materializePresentMarkersInArray(path string, expected []any, actual any) (
 	copy(materialized, expected)
 	for index, nestedExpected := range expected {
 		nestedPath := fmt.Sprintf("%s[%d]", path, index)
-		if isResponsePresentMarker(nestedExpected) {
-			return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", nestedPath)
+		if matcher, ok := responseValueMatcherFromValue(nestedExpected); ok {
+			switch matcher.key {
+			case responsePresentMatcherKey:
+				return nil, fmt.Errorf("%s: presence marker can be used only as an object field value", nestedPath)
+			case partialResponseAbsentMatcherKey:
+				return nil, fmt.Errorf("%s: absence marker is supported only in partial response mode", nestedPath)
+			}
 		}
-		if !responseTemplateContainsPresentMarker(nestedExpected) {
+		if !responseTemplateContainsSpecialMatcher(nestedExpected) {
 			continue
 		}
 

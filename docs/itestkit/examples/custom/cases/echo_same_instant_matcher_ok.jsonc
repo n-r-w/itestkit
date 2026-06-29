@@ -1,0 +1,30 @@
+{
+  "name": "echo compares timestamp by instant",
+  "description": "demonstrates $same_instant for RFC3339 values that represent the same moment",
+  "steps": [
+    {
+      "id": "prepare-prefix",
+      "kind": "prepare",
+      "handler": "SetPrefix",
+      "request": {
+        "prefix": ""
+      }
+    },
+    {
+      "id": "action-echo",
+      "kind": "action",
+      "handler": "Echo",
+      "request": {
+        "message": "2026-05-30T13:00:00+03:00"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "action-echo",
+    "response": {
+      // The matcher compares the represented instant and does not require identical timezone formatting.
+      "message": { "$same_instant": "2026-05-30T10:00:00Z" }
+    }
+  }
+}
