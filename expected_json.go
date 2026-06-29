@@ -35,7 +35,7 @@ func MatchExpectedJSON(expected, actual any, mode MatchMode) error {
 
 // matchExpectedJSONExact enforces full equality after replacing allowed matchers with actual values.
 func matchExpectedJSONExact(expected, actual any) error {
-	materializedExpected, materializeErr := materializePresentMarkers("$", expected, actual)
+	materializedExpected, materializeErr := materializeExpectedMatchers("$", expected, actual)
 	if materializeErr != nil {
 		return fmt.Errorf("json comparison failed: %w", materializeErr)
 	}

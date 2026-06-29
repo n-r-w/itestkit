@@ -198,6 +198,7 @@ Semantic matcher objects are opt-in expected values and work in both modes:
 
 - `{ "$same_instant": "2026-05-30T10:00:00Z" }` — actual and expected values must be RFC3339 strings that represent the same instant.
 - `{ "$matches": "^trace-\\d+$" }` — actual value must be a string that matches the regular expression.
+- `{ "$not_empty": true }` — actual value must be a non-empty string, array, or object. `"   "` passes; `""`, `[]`, `{}`, `null`, numbers, and booleans fail.
 
 For expected errors, use `message_contains` when the error message is part of the contract.
 

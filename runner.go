@@ -45,6 +45,8 @@ const (
 	responseSameInstantMatcherKey = "$same_instant"
 	// responseMatchesMatcherKey compares string fields by regular expression.
 	responseMatchesMatcherKey = "$matches"
+	// responseNotEmptyMatcherKey requires a string, array, or object with at least one element.
+	responseNotEmptyMatcherKey = "$not_empty"
 )
 
 // RunCasesOption configures the behavior of RunCases.
@@ -706,7 +708,7 @@ func assertSuccessfulResponseMatch[C any, S comparable](
 	switch testCase.Assert.ResponseMode {
 	case "", ResponseModeExact:
 		if responseTemplateContainsSpecialMatcher(testCase.Assert.Response) {
-			return assertExactResponseWithPresentMarkers(
+			return assertExactResponseWithMatchers(
 				testCase.SourcePath,
 				targetStep.Handler,
 				testCase.Assert.Response,
@@ -757,8 +759,8 @@ func assertNormalizedResponseMatch(sourcePath string, expectedNormalized, actual
 	return nil
 }
 
-// assertExactResponseWithPresentMarkers turns presence markers into actual values before exact comparison.
-func assertExactResponseWithPresentMarkers[C any](
+// assertExactResponseWithMatchers turns matched expected fields into actual values before exact comparison.
+func assertExactResponseWithMatchers[C any](
 	sourcePath string,
 	handler Handler[C],
 	expectedTemplate any,
@@ -766,25 +768,25 @@ func assertExactResponseWithPresentMarkers[C any](
 ) error {
 	actualTemplateView, viewErr := responseTemplateActualView(actualNormalized)
 	if viewErr != nil {
-		return fmt.Errorf("%q: prepare actual response view for presence markers: %w", sourcePath, viewErr)
+		return fmt.Errorf("%q: prepare actual response view for response matchers: %w", sourcePath, viewErr)
 	}
-	materializedExpected, materializeErr := materializePresentMarkers("$", expectedTemplate, actualTemplateView)
+	materializedExpected, materializeErr := materializeExpectedMatchers("$", expectedTemplate, actualTemplateView)
 	if materializeErr != nil {
 		return fmt.Errorf("%q: response comparison failed: %w", sourcePath, materializeErr)
 	}
 
 	rawExpected, marshalErr := json.Marshal(materializedExpected)
 	if marshalErr != nil {
-		return fmt.Errorf("%q: encode expected response with presence markers: %w", sourcePath, marshalErr)
+		return fmt.Errorf("%q: encode expected response with response matchers: %w", sourcePath, marshalErr)
 	}
 
 	expectedResponse, decodeErr := handler.DecodeExpectedResponse(rawExpected)
 	if decodeErr != nil {
-		return fmt.Errorf("%q: decode expected response with presence markers: %w", sourcePath, decodeErr)
+		return fmt.Errorf("%q: decode expected response with response matchers: %w", sourcePath, decodeErr)
 	}
 	expectedNormalized, normalizeErr := handler.NormalizeResponse(expectedResponse)
 	if normalizeErr != nil {
-		return fmt.Errorf("%q: normalize expected response with presence markers: %w", sourcePath, normalizeErr)
+		return fmt.Errorf("%q: normalize expected response with response matchers: %w", sourcePath, normalizeErr)
 	}
 
 	return assertNormalizedResponseMatch(sourcePath, expectedNormalized, actualNormalized)
@@ -935,7 +937,8 @@ func responseValueMatcherFromObject(expected map[string]any) (responseValueMatch
 		case partialResponseAbsentMatcherKey,
 			responsePresentMatcherKey,
 			responseSameInstantMatcherKey,
-			responseMatchesMatcherKey:
+			responseMatchesMatcherKey,
+			responseNotEmptyMatcherKey:
 			return responseValueMatcher{key: key, argument: argument}, true
 		default:
 			return responseValueMatcher{}, false
@@ -960,6 +963,8 @@ func matchResponseValueMatcher(path string, matcher responseValueMatcher, actual
 		return matchSameInstantResponseValue(path, matcher.argument, actual)
 	case responseMatchesMatcherKey:
 		return matchRegexResponseValue(path, matcher.argument, actual)
+	case responseNotEmptyMatcherKey:
+		return matchNotEmptyResponseValue(path, matcher, actual)
 	case partialResponseAbsentMatcherKey:
 		return fmt.Errorf("%s: absence marker can be used only as an object field value", path)
 	case responsePresentMatcherKey:
@@ -1072,6 +1077,38 @@ func matchRegexResponseValue(path string, expectedArgument, actual any) error {
 	return nil
 }
 
+// matchNotEmptyResponseValue checks length-bearing JSON values without trimming string content.
+func matchNotEmptyResponseValue(path string, matcher responseValueMatcher, actual any) error {
+	if err := validateBooleanMatcherArgument(path, matcher); err != nil {
+		return err
+	}
+
+	switch actualValue := actual.(type) {
+	case string:
+		if actualValue != "" {
+			return nil
+		}
+	case []any:
+		if len(actualValue) > 0 {
+			return nil
+		}
+	case map[string]any:
+		if len(actualValue) > 0 {
+			return nil
+		}
+	default:
+		return fmt.Errorf(
+			"%s: %s expects actual string, array, or object, got %v (%T)",
+			path,
+			responseNotEmptyMatcherKey,
+			actual,
+			actual,
+		)
+	}
+
+	return fmt.Errorf("%s: %s mismatch: value is empty", path, responseNotEmptyMatcherKey)
+}
+
 // responseTemplateContainsSpecialMatcher reports whether an expected response needs runtime matching before decoding.
 func responseTemplateContainsSpecialMatcher(expected any) bool {
 	if _, ok := responseValueMatcherFromValue(expected); ok {
@@ -1111,8 +1148,8 @@ func responseTemplateActualView(actualNormalized any) (any, error) {
 	return actualView, nil
 }
 
-// materializePresentMarkers replaces object-field presence markers with values from the normalized response.
-func materializePresentMarkers(path string, expected, actual any) (any, error) {
+// materializeExpectedMatchers replaces matcher objects with values from the normalized response.
+func materializeExpectedMatchers(path string, expected, actual any) (any, error) {
 	if matcher, ok := responseValueMatcherFromValue(expected); ok {
 		switch matcher.key {
 		case responsePresentMatcherKey:
@@ -1129,16 +1166,16 @@ func materializePresentMarkers(path string, expected, actual any) (any, error) {
 
 	switch expectedValue := expected.(type) {
 	case map[string]any:
-		return materializePresentMarkersInObject(path, expectedValue, actual)
+		return materializeExpectedMatchersInObject(path, expectedValue, actual)
 	case []any:
-		return materializePresentMarkersInArray(path, expectedValue, actual)
+		return materializeExpectedMatchersInArray(path, expectedValue, actual)
 	default:
 		return expected, nil
 	}
 }
 
-// materializePresentMarkersInObject replaces field markers while preserving non-marker expected fields.
-func materializePresentMarkersInObject(path string, expected map[string]any, actual any) (map[string]any, error) {
+// materializeExpectedMatchersInObject replaces field matchers while preserving non-matcher expected fields.
+func materializeExpectedMatchersInObject(path string, expected map[string]any, actual any) (map[string]any, error) {
 	actualValue, ok := actual.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%s: type mismatch: expected object %v, actual %v (%T)", path, expected, actual, actual)
@@ -1148,7 +1185,7 @@ func materializePresentMarkersInObject(path string, expected map[string]any, act
 	for key, nestedExpected := range expected {
 		nestedPath := partialResponsePath(path, key)
 		nestedActual, exists := actualValue[key]
-		nestedMaterialized, err := materializePresentMarkersInObjectField(
+		nestedMaterialized, err := materializeExpectedMatchersInObjectField(
 			nestedPath,
 			nestedExpected,
 			nestedActual,
@@ -1162,8 +1199,8 @@ func materializePresentMarkersInObject(path string, expected map[string]any, act
 	return materialized, nil
 }
 
-// materializePresentMarkersInObjectField applies exact-mode matcher rules to one object field.
-func materializePresentMarkersInObjectField(path string, expected, actual any, exists bool) (any, error) {
+// materializeExpectedMatchersInObjectField applies exact-mode matcher rules to one object field.
+func materializeExpectedMatchersInObjectField(path string, expected, actual any, exists bool) (any, error) {
 	matcher, matched := responseValueMatcherFromValue(expected)
 	if matched {
 		return materializeMatcherObjectField(path, matcher, expected, actual, exists)
@@ -1174,7 +1211,7 @@ func materializePresentMarkersInObjectField(path string, expected, actual any, e
 	if !exists {
 		return nil, missingResponseFieldError(path, expected)
 	}
-	return materializePresentMarkers(path, expected, actual)
+	return materializeExpectedMatchers(path, expected, actual)
 }
 
 // materializeMatcherObjectField turns matched expected fields into actual values for later exact comparison.
@@ -1207,8 +1244,8 @@ func materializeMatcherObjectField(
 	}
 }
 
-// materializePresentMarkersInArray replaces markers nested inside array items without allowing marker items.
-func materializePresentMarkersInArray(path string, expected []any, actual any) ([]any, error) {
+// materializeExpectedMatchersInArray replaces matchers nested inside array items.
+func materializeExpectedMatchersInArray(path string, expected []any, actual any) ([]any, error) {
 	materialized := make([]any, len(expected))
 	copy(materialized, expected)
 	for index, nestedExpected := range expected {
@@ -1233,7 +1270,7 @@ func materializePresentMarkersInArray(path string, expected []any, actual any) (
 			return nil, fmt.Errorf("%s: array length mismatch: expected at least %d, actual %d", path, index+1, len(actualValue))
 		}
 
-		nestedMaterialized, err := materializePresentMarkers(nestedPath, nestedExpected, actualValue[index])
+		nestedMaterialized, err := materializeExpectedMatchers(nestedPath, nestedExpected, actualValue[index])
 		if err != nil {
 			return nil, err
 		}

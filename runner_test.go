@@ -950,6 +950,91 @@ func TestRunCases_ExactResponseMatchesMatcherAcceptsRegex(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestRunCases_PartialResponseNotEmptyMatcherAcceptsSupportedValues checks values with JSON length.
+func TestRunCases_PartialResponseNotEmptyMatcherAcceptsSupportedValues(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"string": " ",
+		"array":  []any{"item"},
+		"object": map[string]any{"key": "value"},
+	}
+	expected := map[string]any{
+		"string": map[string]any{"$not_empty": true},
+		"array":  map[string]any{"$not_empty": true},
+		"object": map[string]any{"$not_empty": true},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseNotEmptyMatcherRejectsEmptyAndUnsupportedValues checks strict type rules.
+func TestRunCases_PartialResponseNotEmptyMatcherRejectsEmptyAndUnsupportedValues(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		actual any
+	}{
+		{name: "empty string", actual: ""},
+		{name: "empty array", actual: []any{}},
+		{name: "empty object", actual: map[string]any{}},
+		{name: "null", actual: nil},
+		{name: "number", actual: json.Number("1")},
+		{name: "bool", actual: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			actual := map[string]any{
+				"value": testCase.actual,
+			}
+			expected := map[string]any{
+				"value": map[string]any{"$not_empty": true},
+			}
+
+			err := runPartialResponseCase(t, actual, expected)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "$.value")
+			require.Contains(t, err.Error(), "$not_empty")
+		})
+	}
+}
+
+// TestRunCases_ExactResponseNotEmptyMatcherKeepsStrictResponseComparison checks matcher materialization in exact mode.
+func TestRunCases_ExactResponseNotEmptyMatcherKeepsStrictResponseComparison(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"token":  "abc",
+		"items":  []any{"item"},
+		"meta":   map[string]any{"source": "test"},
+		"status": "created",
+	}
+	expected := map[string]any{
+		"token":  map[string]any{"$not_empty": true},
+		"items":  map[string]any{"$not_empty": true},
+		"meta":   map[string]any{"$not_empty": true},
+		"status": "created",
+	}
+
+	err := runExactPresentMarkerCase(t, actual, expected)
+	require.NoError(t, err)
+
+	err = runExactPresentMarkerCase(t, map[string]any{
+		"token":  "abc",
+		"items":  []any{"item"},
+		"meta":   map[string]any{"source": "test"},
+		"status": "created",
+		"extra":  true,
+	}, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "response mismatch")
+}
+
 // TestRunCases_PartialResponseKeepsStrictArrayLength checks that the mode is `partial`
 // does not turn arrays into subsets and does not skip extra elements.
 func TestRunCases_PartialResponseKeepsStrictArrayLength(t *testing.T) {

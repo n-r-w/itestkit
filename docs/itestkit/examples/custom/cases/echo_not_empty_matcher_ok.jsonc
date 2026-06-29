@@ -1,0 +1,30 @@
+{
+  "name": "echo returns non-empty message",
+  "description": "demonstrates $not_empty for a selected string field",
+  "steps": [
+    {
+      "id": "prepare-prefix",
+      "kind": "prepare",
+      "handler": "SetPrefix",
+      "request": {
+        "prefix": "trace-"
+      }
+    },
+    {
+      "id": "action-echo",
+      "kind": "action",
+      "handler": "Echo",
+      "request": {
+        "message": "12345"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "action-echo",
+    "response": {
+      // The matcher accepts any non-empty string without comparing its exact value.
+      "message": { "$not_empty": true }
+    }
+  }
+}
