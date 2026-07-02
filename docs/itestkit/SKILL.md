@@ -1,6 +1,8 @@
 ---
 name: itestkit
 description: How to use `github.com/n-r-w/itestkit` to run integration tests from JSONC cases.
+metadata:
+  version: "1.0"
 ---
 
 <itestkit_usage>
@@ -69,12 +71,13 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       2) Template resolution happens during case execution, using outputs of already completed steps.
       3) If template references an unavailable step output or invalid path, case execution fails on that step.
     10. Runtime calendar macros in JSONC:
-      1) If cases use `<test_date...>` or `<test_timestamp...>`, wrap `CaseSource` with `testcalendar.New().WrapSource(...)` before `itestkit.LoadCases(...)`.
+      1) If cases use `<test_date...>`, `<test_timestamp...>`, or `<test_rfc3339_timestamp...>`, wrap `CaseSource` with `testcalendar.New().WrapSource(...)` before `itestkit.LoadCases(...)`.
       2) `test_date` renders `YYYY-MM-DD`, supports day offsets only, and may use explicit fixed-offset timezone suffix `@±HH:MM`.
       3) `test_timestamp` renders `YYYY-MM-DD HH:MM:SS+TZ`, supports day/hour/minute offsets in `d -> h -> m` order, and may use explicit fixed-offset timezone suffix `@±HH:MM`.
-      4) The macro must occupy the whole string value; partial interpolation inside a larger string is not supported.
-      5) Inside `{"$date": ...}` only `test_date` is allowed; the selected calendar day may use explicit timezone, but the rendered value is RFC3339 midnight UTC.
-      6) Fixed anchor: `2026-03-01 03:00:00 +06:00`.
+      4) `test_rfc3339_timestamp` renders RFC3339, supports day/hour/minute offsets in `d -> h -> m` order, and may use explicit fixed-offset timezone suffix `@±HH:MM`.
+      5) The macro must occupy the whole string value; partial interpolation inside a larger string is not supported.
+      6) Inside `{"$date": ...}` only `test_date` is allowed; the selected calendar day may use explicit timezone, but the rendered value is RFC3339 midnight UTC.
+      7) Fixed anchor: `2026-03-01 03:00:00 +06:00`.
   </guidelines>
 
   <critical_requirements>
@@ -144,7 +147,7 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
       //   - itestkit.SuiteLifecycle[SC]
       //   - itestkit.SuiteCaseHarnessFactory[SC, C]
       //   - itestkit.StatusCodec[S] + itestkit.ErrorInspector[S]
-      // 2) Optional if fixtures use <test_date...>/<test_timestamp...>:
+      // 2) Optional if fixtures use <test_date...>/<test_timestamp...>/<test_rfc3339_timestamp...>:
       //   source = testcalendar.New().WrapSource(source)
       // 3) Load + run cases:
       cases, err := itestkit.LoadCases(source, "cases", registry, statusCodec)
@@ -253,10 +256,14 @@ description: How to use `github.com/n-r-w/itestkit` to run integration tests fro
         6) `<test_timestamp+7d20h30m>`
         7) `<test_timestamp@+03:00>`
         8) `<test_timestamp+7d20h30m@-05:00>`
+        9) `<test_rfc3339_timestamp>`
+        10) `<test_rfc3339_timestamp+7d20h30m>`
+        11) `<test_rfc3339_timestamp@+03:00>`
+        12) `<test_rfc3339_timestamp+7d20h30m@-05:00>`
       4. Macro rules:
         1) the macro must be the whole string value
         2) `test_date` supports only `d`
-        3) `test_timestamp` supports `d`, `h`, `m` in this order, without duplicate units
+        3) `test_timestamp` and `test_rfc3339_timestamp` support `d`, `h`, `m` in this order, without duplicate units
         4) explicit timezone uses suffix `@±HH:MM` after the relative offset, if any
         5) if timezone is omitted, the default fixed anchor timezone `+06:00` is used
         6) inside Mongo-style `{"$date": ...}` only `test_date` is allowed; it becomes RFC3339 midnight UTC for the selected day

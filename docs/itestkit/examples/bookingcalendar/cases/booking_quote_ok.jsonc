@@ -30,7 +30,7 @@
                 },
                 "stub_response": {
                     "rate_id": "rate-501",
-                    "expires_at": "<test_timestamp+2h30m>"
+                    "expires_at": "<test_rfc3339_timestamp+2h30m>"
                 }
             }
         },
@@ -62,7 +62,7 @@
             "nights": 2,
             "days_until_check_in": 10,
             "rate_id": "rate-501",
-            "quote_expires_at": "2026-03-01 05:30:00+06:00"
+            "quote_expires_at": "2026-03-01T05:30:00+06:00"
         }
     }
 }

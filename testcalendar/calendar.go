@@ -25,19 +25,20 @@ const (
 )
 
 const (
-	dateMacroPrefix      = "test_date"
-	timestampMacroPrefix = "test_timestamp"
-	timezoneSeparator    = "@"
-	dateLayout           = time.DateOnly
-	timestampLayout      = "2006-01-02 15:04:05-07:00"
-	jsoncExtension       = ".jsonc"
-	dollarDateKey        = "$date"
-	minOffsetLength      = 3
-	maxMacroSuffixParts  = 2
-	timezoneLength       = len("+00:00")
-	hoursPerDay          = 24
-	minutesPerHour       = 60
-	secondsPerMinute     = 60
+	dateMacroPrefix             = "test_date"
+	timestampMacroPrefix        = "test_timestamp"
+	rfc3339TimestampMacroPrefix = "test_rfc3339_timestamp"
+	timezoneSeparator           = "@"
+	dateLayout                  = time.DateOnly
+	timestampLayout             = "2006-01-02 15:04:05-07:00"
+	jsoncExtension              = ".jsonc"
+	dollarDateKey               = "$date"
+	minOffsetLength             = 3
+	maxMacroSuffixParts         = 2
+	timezoneLength              = len("+00:00")
+	hoursPerDay                 = 24
+	minutesPerHour              = 60
+	secondsPerMinute            = 60
 )
 
 const (
@@ -112,6 +113,7 @@ type macroKind uint8
 const (
 	macroKindDate macroKind = iota + 1
 	macroKindTimestamp
+	macroKindRFC3339Timestamp
 )
 
 // macroToken stores the parsed calendar macro.
@@ -243,12 +245,19 @@ func (calendar Calendar) resolveStringValue(value, key string) (resolvedValue st
 		}
 
 		return renderTime.Format(timestampLayout), true, nil
+	case macroKindRFC3339Timestamp:
+		if key == dollarDateKey {
+			return "", false, fmt.Errorf("macro %q is not supported inside %s", value, dollarDateKey)
+		}
+
+		return renderTime.Format(time.RFC3339), true, nil
 	default:
 		return "", false, errors.New("unsupported macro kind")
 	}
 }
 
-// parseMacroToken parses a string like <test_date+9d@+03:00> or <test_timestamp-1d@-05:00>.
+// parseMacroToken parses a full-string calendar macro such as
+// <test_date+9d@+03:00>, <test_timestamp-1d@-05:00>, or <test_rfc3339_timestamp+3h>.
 func parseMacroToken(value string) (macroToken, bool, error) {
 	if strings.HasPrefix(value, "<test_") && !strings.HasSuffix(value, ">") {
 		return macroToken{}, true, fmt.Errorf("invalid calendar macro %q", value)
@@ -265,6 +274,7 @@ func parseMacroToken(value string) (macroToken, bool, error) {
 	}{
 		{name: dateMacroPrefix, kind: macroKindDate},
 		{name: timestampMacroPrefix, kind: macroKindTimestamp},
+		{name: rfc3339TimestampMacroPrefix, kind: macroKindRFC3339Timestamp},
 	} {
 		if !strings.HasPrefix(body, prefix.name) {
 			continue
@@ -412,13 +422,13 @@ func offsetUnitSpec(kind macroKind, unit byte, offset string) (int, time.Duratio
 	case 'd':
 		return offsetRankDays, hoursPerDay * time.Hour, nil
 	case 'h':
-		if kind != macroKindTimestamp {
+		if !macroKindSupportsTimeOffset(kind) {
 			return 0, 0, fmt.Errorf("hours are not supported in %q", offset)
 		}
 
 		return offsetRankHours, time.Hour, nil
 	case 'm':
-		if kind != macroKindTimestamp {
+		if !macroKindSupportsTimeOffset(kind) {
 			return 0, 0, fmt.Errorf("minutes are not supported in %q", offset)
 		}
 
@@ -426,4 +436,9 @@ func offsetUnitSpec(kind macroKind, unit byte, offset string) (int, time.Duratio
 	default:
 		return 0, 0, fmt.Errorf("invalid offset unit in %q", offset)
 	}
+}
+
+// macroKindSupportsTimeOffset reports whether the macro represents a timestamp with hour and minute precision.
+func macroKindSupportsTimeOffset(kind macroKind) bool {
+	return kind == macroKindTimestamp || kind == macroKindRFC3339Timestamp
 }

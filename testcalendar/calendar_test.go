@@ -132,6 +132,46 @@ func TestTransformJSONC_RewritesTimestampMacrosWithExplicitTimezone(t *testing.T
 }`, string(transformed))
 }
 
+// TestTransformJSONC_RewritesRFC3339TimestampMacros checks RFC3339 timestamp rendering for API fields such as HTTP query parameters.
+func TestTransformJSONC_RewritesRFC3339TimestampMacros(t *testing.T) {
+	t.Parallel()
+
+	calendar := New()
+	content := []byte(`{
+  "query": {
+    "from": "<test_rfc3339_timestamp+92d3h>",
+    "to": "<test_rfc3339_timestamp+122d3h>"
+  }
+}`)
+
+	transformed, err := calendar.transformJSONC(content)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+  "query": {
+    "from": "2026-06-01T06:00:00+06:00",
+    "to": "2026-07-01T06:00:00+06:00"
+  }
+}`, string(transformed))
+}
+
+// TestTransformJSONC_RewritesRFC3339TimestampMacrosWithExplicitTimezone checks that explicit zones are preserved in RFC3339 output.
+func TestTransformJSONC_RewritesRFC3339TimestampMacrosWithExplicitTimezone(t *testing.T) {
+	t.Parallel()
+
+	calendar := New()
+	content := []byte(`{
+  "from": "<test_rfc3339_timestamp+7d20h30m@+03:00>"
+}`)
+
+	transformed, err := calendar.transformJSONC(content)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+  "from": "2026-03-08T20:30:00+03:00"
+}`, string(transformed))
+}
+
 // TestTransformJSONC_RewritesMacrosInsideArrays tests macro substitution in arrays without object-key context.
 func TestTransformJSONC_RewritesMacrosInsideArrays(t *testing.T) {
 	t.Parallel()
@@ -196,6 +236,16 @@ func TestResolveStringValue_RejectsTimestampInsideMongoDate(t *testing.T) {
 
 	calendar := New()
 	_, _, err := calendar.resolveStringValue("<test_timestamp>", "$date")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not supported inside $date")
+}
+
+// TestResolveStringValue_RejectsRFC3339TimestampInsideMongoDate keeps $date reserved for day-based macros.
+func TestResolveStringValue_RejectsRFC3339TimestampInsideMongoDate(t *testing.T) {
+	t.Parallel()
+
+	calendar := New()
+	_, _, err := calendar.resolveStringValue("<test_rfc3339_timestamp>", "$date")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is not supported inside $date")
 }
