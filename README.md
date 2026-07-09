@@ -197,6 +197,7 @@ For successful cases, `assert.response` is checked against a normalized step res
 Semantic matcher objects are opt-in expected values and work in both modes:
 
 - `{ "$same_instant": "2026-05-30T10:00:00Z" }` — actual and expected values must be RFC3339 strings that represent the same instant.
+- `{ "$rfc3339": true }` — actual value must be an RFC3339 date-time string. Use it when only the format matters and the instant is dynamic.
 - `{ "$matches": "^trace-\\d+$" }` — actual value must be a string that matches the regular expression.
 - `{ "$not_empty": true }` — actual value must be a non-empty string, array, or object. `"   "` passes; `""`, `[]`, `{}`, `null`, numbers, and booleans fail.
 

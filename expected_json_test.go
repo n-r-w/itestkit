@@ -36,6 +36,12 @@ func TestMatchExpectedJSON_ExactMode(t *testing.T) {
 			errorContains: "",
 		},
 		{
+			name:          "rfc3339 matcher accepts valid date-time",
+			expected:      mustDecodeExpectedJSON(t, `{"id":"1","generated_at":{"$rfc3339":true}}`),
+			actual:        mustDecodeExpectedJSON(t, `{"id":"1","generated_at":"2026-03-01T00:00:00+03:00"}`),
+			errorContains: "",
+		},
+		{
 			name:          "extra actual field fails",
 			expected:      mustDecodeExpectedJSON(t, `{"id":"1"}`),
 			actual:        mustDecodeExpectedJSON(t, `{"id":"1","extra":true}`),
@@ -91,6 +97,12 @@ func TestMatchExpectedJSON_PartialMode(t *testing.T) {
 			expected:      mustDecodeExpectedJSON(t, `{"deleted_at":{"$absent":true}}`),
 			actual:        mustDecodeExpectedJSON(t, `{"id":"1"}`),
 			errorContains: "",
+		},
+		{
+			name:          "rfc3339 matcher rejects invalid date-time",
+			expected:      mustDecodeExpectedJSON(t, `{"generated_at":{"$rfc3339":true}}`),
+			actual:        mustDecodeExpectedJSON(t, `{"generated_at":"2026-03-01 00:00:00+03:00"}`),
+			errorContains: "$rfc3339",
 		},
 		{
 			name:          "absent marker rejects null field",

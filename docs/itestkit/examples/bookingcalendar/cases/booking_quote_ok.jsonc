@@ -62,7 +62,8 @@
             "nights": 2,
             "days_until_check_in": 10,
             "rate_id": "rate-501",
-            "quote_expires_at": "2026-03-01T05:30:00+06:00"
+            // $same_instant compares the macro-rendered instant without requiring identical timezone text.
+            "quote_expires_at": { "$same_instant": "<test_rfc3339_timestamp+2h30m@+03:00>" }
         }
     }
 }

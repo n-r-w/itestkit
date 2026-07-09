@@ -1,0 +1,30 @@
+{
+  "name": "echo validates RFC3339 timestamp format",
+  "description": "demonstrates $rfc3339 for date-time fields whose concrete instant is dynamic",
+  "steps": [
+    {
+      "id": "prepare-prefix",
+      "kind": "prepare",
+      "handler": "SetPrefix",
+      "request": {
+        "prefix": ""
+      }
+    },
+    {
+      "id": "action-echo",
+      "kind": "action",
+      "handler": "Echo",
+      "request": {
+        "message": "2026-03-01T00:00:00+03:00"
+      }
+    }
+  ],
+  "assert": {
+    "code": "OK",
+    "response_from_step": "action-echo",
+    "response": {
+      // The matcher checks only RFC3339 syntax and does not fix the expected instant.
+      "message": { "$rfc3339": true }
+    }
+  }
+}

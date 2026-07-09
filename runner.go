@@ -43,6 +43,8 @@ const (
 	responsePresentMatcherKey = "$present"
 	// responseSameInstantMatcherKey compares RFC3339 timestamps by the represented instant.
 	responseSameInstantMatcherKey = "$same_instant"
+	// responseRFC3339MatcherKey requires an RFC3339 date-time string without fixing the instant.
+	responseRFC3339MatcherKey = "$rfc3339"
 	// responseMatchesMatcherKey compares string fields by regular expression.
 	responseMatchesMatcherKey = "$matches"
 	// responseNotEmptyMatcherKey requires a string, array, or object with at least one element.
@@ -937,6 +939,7 @@ func responseValueMatcherFromObject(expected map[string]any) (responseValueMatch
 		case partialResponseAbsentMatcherKey,
 			responsePresentMatcherKey,
 			responseSameInstantMatcherKey,
+			responseRFC3339MatcherKey,
 			responseMatchesMatcherKey,
 			responseNotEmptyMatcherKey:
 			return responseValueMatcher{key: key, argument: argument}, true
@@ -961,6 +964,8 @@ func matchResponseValueMatcher(path string, matcher responseValueMatcher, actual
 	switch matcher.key {
 	case responseSameInstantMatcherKey:
 		return matchSameInstantResponseValue(path, matcher.argument, actual)
+	case responseRFC3339MatcherKey:
+		return matchRFC3339ResponseValue(path, matcher, actual)
 	case responseMatchesMatcherKey:
 		return matchRegexResponseValue(path, matcher.argument, actual)
 	case responseNotEmptyMatcherKey:
@@ -1039,6 +1044,34 @@ func matchSameInstantResponseValue(path string, expectedArgument, actual any) er
 			responseSameInstantMatcherKey,
 			expectedString,
 			actualString,
+		)
+	}
+	return nil
+}
+
+// matchRFC3339ResponseValue validates a date-time string when the concrete instant is intentionally dynamic.
+func matchRFC3339ResponseValue(path string, matcher responseValueMatcher, actual any) error {
+	if err := validateBooleanMatcherArgument(path, matcher); err != nil {
+		return err
+	}
+
+	actualString, ok := actual.(string)
+	if !ok {
+		return fmt.Errorf(
+			"%s: %s expects actual RFC3339 string, got %v (%T)",
+			path,
+			responseRFC3339MatcherKey,
+			actual,
+			actual,
+		)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, actualString); err != nil {
+		return fmt.Errorf(
+			"%s: %s expects actual RFC3339 timestamp %q: %w",
+			path,
+			responseRFC3339MatcherKey,
+			actualString,
+			err,
 		)
 	}
 	return nil

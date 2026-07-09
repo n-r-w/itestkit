@@ -849,10 +849,10 @@ func TestRunCases_PartialResponseSameInstantMatcherAcceptsEquivalentRFC3339Value
 	t.Parallel()
 
 	actual := map[string]any{
-		"created_at": "2026-05-30T13:00:00+03:00",
+		"created_at": "2026-02-28T21:00:00Z",
 	}
 	expected := map[string]any{
-		"created_at": map[string]any{"$same_instant": "2026-05-30T10:00:00Z"},
+		"created_at": map[string]any{"$same_instant": "2026-03-01T00:00:00+03:00"},
 	}
 
 	err := runPartialResponseCase(t, actual, expected)
@@ -948,6 +948,80 @@ func TestRunCases_ExactResponseMatchesMatcherAcceptsRegex(t *testing.T) {
 
 	err := runExactPresentMarkerCase(t, actual, expected)
 	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseRFC3339MatcherAcceptsValidTimestamp checks format-only date-time matching.
+func TestRunCases_PartialResponseRFC3339MatcherAcceptsValidTimestamp(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"generated_at": "2026-03-01T00:00:00.123456789+03:00",
+	}
+	expected := map[string]any{
+		"generated_at": map[string]any{"$rfc3339": true},
+	}
+
+	err := runPartialResponseCase(t, actual, expected)
+	require.NoError(t, err)
+}
+
+// TestRunCases_PartialResponseRFC3339MatcherRejectsInvalidValues checks format-only matcher type and syntax errors.
+func TestRunCases_PartialResponseRFC3339MatcherRejectsInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		matcher  map[string]any
+		actual   any
+		errorKey string
+	}{
+		{name: "invalid timestamp", matcher: map[string]any{"$rfc3339": true}, actual: "2026-03-01 00:00:00+03:00", errorKey: "$rfc3339"},
+		{name: "non-string actual", matcher: map[string]any{"$rfc3339": true}, actual: json.Number("1"), errorKey: "$rfc3339"},
+		{name: "false matcher argument", matcher: map[string]any{"$rfc3339": false}, actual: "2026-03-01T00:00:00+03:00", errorKey: "$rfc3339"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			actual := map[string]any{
+				"generated_at": testCase.actual,
+			}
+			expected := map[string]any{
+				"generated_at": testCase.matcher,
+			}
+
+			err := runPartialResponseCase(t, actual, expected)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "$.generated_at")
+			require.Contains(t, err.Error(), testCase.errorKey)
+		})
+	}
+}
+
+// TestRunCases_ExactResponseRFC3339MatcherKeepsStrictResponseComparison checks matcher materialization in exact mode.
+func TestRunCases_ExactResponseRFC3339MatcherKeepsStrictResponseComparison(t *testing.T) {
+	t.Parallel()
+
+	actual := map[string]any{
+		"generated_at": "2026-03-01T00:00:00Z",
+		"status":       "created",
+	}
+	expected := map[string]any{
+		"generated_at": map[string]any{"$rfc3339": true},
+		"status":       "created",
+	}
+
+	err := runExactPresentMarkerCase(t, actual, expected)
+	require.NoError(t, err)
+
+	err = runExactPresentMarkerCase(t, map[string]any{
+		"generated_at": "2026-03-01T00:00:00Z",
+		"status":       "created",
+		"extra":        true,
+	}, expected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "response mismatch")
 }
 
 // TestRunCases_PartialResponseNotEmptyMatcherAcceptsSupportedValues checks values with JSON length.
