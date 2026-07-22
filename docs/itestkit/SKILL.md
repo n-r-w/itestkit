@@ -2,7 +2,7 @@
 name: itestkit
 description: How to use `github.com/n-r-w/itestkit` to run integration tests from JSONC cases.
 metadata:
-  version: "1.1"
+  version: "1.2"
 ---
 
 <itestkit_usage>
@@ -213,6 +213,7 @@ metadata:
       7. Use `body_subset` for JSON subset matching and `raw_body` for exact string matching.
       8. Use `headers_present` for dynamic headers whose values must not be compared but whose absence must fail matching.
       9. For success checks, set `assert.response_from_step` to the action or verify step that owns the expected response.
+      10. Use `calls: []` to assert that the SUT makes no outbound HTTP requests. Any observed request receives HTTP 500 and makes `VerifyHTTPCalls` fail with an unexpected-request error in both `strict` and `any` ordering modes.
   </httpmock>
 
   <kafka>

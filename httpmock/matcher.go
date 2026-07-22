@@ -67,6 +67,13 @@ func evaluateStrictExtraObserved(
 	observed []ObservedRequest,
 	final bool,
 ) (CheckResult, error) {
+	// A strict zero-call plan must reject the first observed request without
+	// indexing a non-existent final expectation.
+	if len(expected) == 0 {
+		result.LastMismatchReason = describeObservedRequest(observed[0])
+		return result, fmt.Errorf("unexpected request: %s", result.LastMismatchReason)
+	}
+
 	lastExpected := expected[len(expected)-1]
 	if lastExpected.CountMode != CountModeAtLeast && final {
 		return result, fmt.Errorf("expected observed request count=%d, got %d", len(expected), len(observed))
@@ -152,6 +159,10 @@ func strictResponseForRequest(plan Plan, observed []ObservedRequest) (Response, 
 	expected := expandCalls(plan.Calls)
 	index := len(observed) - 1
 	if index < 0 {
+		return Response{}, false
+	}
+	// No response can match when the strict plan explicitly expects zero calls.
+	if len(expected) == 0 {
 		return Response{}, false
 	}
 	if index >= len(expected) {

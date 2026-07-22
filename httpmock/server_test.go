@@ -318,6 +318,22 @@ func TestServer_ExpectedCountZeroRejectsMatchingRequest(t *testing.T) {
 	assert.Contains(t, verifyErr.Error(), "unexpected request")
 }
 
+// TestServer_EmptyStrictPlanRejectsUnexpectedRequest verifies zero-call plans report mismatches without panicking.
+func TestServer_EmptyStrictPlanRejectsUnexpectedRequest(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer(t)
+	require.NoError(t, server.Plan(t.Context(), testPlan(OrderingStrict)))
+
+	responseBody, statusCode := getURLBody(t, server.URL()+"/unexpected")
+
+	assert.Equal(t, http.StatusInternalServerError, statusCode)
+	assert.Equal(t, unexpectedRequestBody, responseBody)
+	_, verifyErr := server.Verify(t.Context())
+	require.Error(t, verifyErr)
+	assert.Contains(t, verifyErr.Error(), "unexpected request")
+}
+
 // TestServer_AwaitEvaluatesCanceledContext checks runner-compatible final await evaluation.
 func TestServer_AwaitEvaluatesCanceledContext(t *testing.T) {
 	t.Parallel()
