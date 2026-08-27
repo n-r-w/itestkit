@@ -2,7 +2,7 @@
 name: itestkit
 description: How to use `github.com/n-r-w/itestkit` to run integration tests from JSONC cases.
 metadata:
-  version: "1.2"
+  version: "1.3"
 ---
 
 <itestkit_usage>
@@ -117,6 +117,11 @@ metadata:
     }
     ```
   </fixtures>
+
+<dump_usage>
+1. ITESTKIT_RESPONSE_DUMP only produces a STRUCTURE, but is NEVER TREATED AS AN EXACT RESULT.
+2. Expected values ​​MUST be calculated independently according to requirements, formulas and invariants
+</dump_usage>
 
   <minimal_example>
     <guidelines>
